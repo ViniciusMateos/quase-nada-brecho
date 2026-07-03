@@ -1,0 +1,24 @@
+# sessão logada do navegador (NUNCA commitar — contém cookies/sessão)
+browser_profile/
+cookies/
+*cookies*.json
+
+# proxy (credenciais — NUNCA commitar)
+proxy.json
+
+# correções manuais das peças (dados do usuário, feitas pelo app)
+overrides.json
+
+# saídas de execução (logs, dumps, amostras)
+output/
+
+# captura Fiddler (pesada, não usada pelo código)
+*.saz
+
+# planilhas (dados — geradas/base, pesadas e regeneráveis)
+*.xlsx
+~$*.xlsx
+
+# python
+__pycache__/
+*.pyc
