@@ -191,6 +191,7 @@ def _saldo(pecas):
     total = len(pecas)
     vend = [p for p in pecas if p["vendida"]]
     faturamento = sum(_receita(p) for p in vend)
+    projecao = sum(_receita(p) for p in pecas)    # faturamento se TUDO vender (realizado + potencial)
     cmv = sum(p["compra"] for p in vend)          # custo do que vendeu
     gasto = sum(p["compra"] for p in pecas)       # investido no drop inteiro
     return {
@@ -198,6 +199,7 @@ def _saldo(pecas):
         "vendidas": len(vend),
         "disponiveis": total - len(vend),
         "faturamento": round(faturamento, 2),
+        "projecao": round(projecao, 2),
         "gasto": round(gasto, 2),
         "lucro": round(faturamento - cmv, 2),      # lucro líquido do que vendeu
         "sold_out": total > 0 and len(vend) == total,

@@ -155,6 +155,9 @@ function DropCard({ drop, onPress, onLongPress, apagando }:
         <View style={styles.saldo}>
           <Linha label="Peças" valor={`${drop.vendidas}/${drop.qtd_pecas} vendidas`} />
           <Linha label="Faturamento" valor={brl(drop.faturamento)} cor={colors.ok} />
+          {drop.disponiveis > 0 && (
+            <Linha label="Projeção (se vender tudo)" valor={brl(drop.projecao)} cor={colors.marca} />
+          )}
           <Linha label="Gasto do drop" valor={brl(drop.gasto)} cor={colors.textoFraco} />
           <Linha label="Lucro líquido" valor={brl(drop.lucro)} cor={colors.marca} forte />
         </View>
