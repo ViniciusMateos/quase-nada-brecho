@@ -22,7 +22,7 @@ const instance = axios.create({
 
 instance.interceptors.request.use(async (config) => {
   config.baseURL = await baseUrl();
-  const token = await getToken();
+  const token = (await getToken()) || env.apiToken;   // salvo em Configurações ou o embutido
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

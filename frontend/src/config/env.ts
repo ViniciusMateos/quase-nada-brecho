@@ -2,9 +2,14 @@ import Constants from 'expo-constants';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string; appVariant?: string };
 
+// URL de produção (fixa) — o app já abre conectado sem precisar preencher nada.
+// Pode ser sobrescrita em Configurações dentro do app.
+const URL_PADRAO = 'https://quasenadaserver1.duckdns.org/brecho';
+
 export const env = {
-  // URL padrão vinda do build (app.config.js lê o EXPO_PUBLIC_API_URL do eas.json e
-  // joga em `extra`). Pode ser sobrescrita em Configurações dentro do app.
-  apiBaseUrl: extra.apiBaseUrl ?? '',
+  apiBaseUrl: extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_URL || URL_PADRAO,
+  // token embutido via env (fica no .env.local / EAS, nunca no repo). Se vazio,
+  // o usuário informa em Configurações.
+  apiToken: process.env.EXPO_PUBLIC_API_TOKEN || '',
   appVariant: extra.appVariant ?? 'preview',
 };
