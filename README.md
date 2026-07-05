@@ -35,23 +35,29 @@ quase-nada-brecho/
 - **Peças** — cataloga cada peça com foto, nome, categoria (auto pela 1ª palavra do nome),
   tamanho, **medidas** (largura/comprimento + especiais: circunferência do boné, palmilha
   do tênis), condição (`x/10`), observação e compra/venda; marca vendida; filtra por
-  disponível/vendida/sem-drop **e por categoria**, com ordenação recente↔antiga.
+  disponível/vendida/sem-drop **e por categoria**, com ordenação recente↔antiga. Mostra o
+  **drop** da peça e permite **entrar nele** (pelo editor ou segurando a peça). O editor é
+  um componente único, compartilhado com a tela de Drops.
 - **Consignado** — marca a peça como de terceiro + a % que fica pra você; os relatórios
   (faturamento, lucro, dashboard, saldo do drop) contam **só a sua %**, não o valor cheio.
 - **Manual (trava)** — marca peças 100% manuais pra o scraper **nunca** atualizar nem promover.
 - **Template do post** — dentro de cada peça, a legenda pronta (nome, medidas, condição,
   preço, observação, hashtags) com botão de **copiar** e link **abrir no Instagram**.
-- **Drops** — agrupa peças em drops datados (rascunho → agendado → publicado).
+- **Drops** — agrupa peças em drops datados (rascunho → agendado → publicado). Cada card mostra
+  peças vendidas, faturamento, gasto, lucro e a **projeção** (faturamento se tudo vender).
 - **Gerar drops** — o motor: distribui N peças em K drops (ou X por drop) de forma
   equilibrada e já monta o cronograma (semanal, quinzenal, etc). Ex.: 65 peças em 6 drops
   → `[11, 11, 11, 11, 11, 10]` em datas espaçadas.
 - **Dashboard** — faturamento, lucro, ROI, ticket médio, estoque e quebra por drop/categoria
   (peças consignadas entram só pela % que fica pra você).
 - **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
-  Instagram do brechó, com **logs ao vivo** (WebSocket + UI animada) e barra de progresso.
-  Ao terminar, importa a planilha pro SQLite (peças com `origem='scraper'`) — o dashboard
-  reflete as vendas reais. As peças raspadas são **histórico** e não entram no planejamento
-  de drops futuros (só o catálogo manual entra no gerador).
+  Instagram do brechó **descendo o perfil como humano** e interceptando as respostas
+  (graphql) que a própria página dispara — sem chamar a API em rajada, então **não toma
+  rate-limit** e pega o feed inteiro numa run. Tem **logs ao vivo** (WebSocket + UI animada)
+  e barra de progresso. Ao terminar, importa a planilha pro SQLite (peças com
+  `origem='scraper'`) — o dashboard reflete as vendas reais. As peças raspadas são
+  **histórico** e não entram no planejamento de drops futuros (só o catálogo manual entra
+  no gerador).
 
 ### Fluxo do scraper
 
@@ -110,6 +116,7 @@ No app (Expo Go) → **Configurações** → URL = a `https://xxxx.loca.lt`, tok
   nginx + systemd. O token da API vai como **variável de ambiente do EAS** (nunca no repo).
 - **Frontend** via EAS build (perfis `development` e `preview` no `eas.json`), já com a URL
   e o token embutidos.
-- **Scraper** roda headless no servidor. Como o Instagram estrangula IP de datacenter, o
-  worker sai por um **proxy residencial** (túnel SSH reverso pela internet de casa) —
-  veja [`docs/PROXY_RESIDENCIAL.md`](docs/PROXY_RESIDENCIAL.md).
+- **Scraper** roda headless no servidor. Ele **rola o perfil e intercepta as respostas**
+  (em vez de chamar a API em rajada), o que evita o rate-limit do Instagram. Ainda sai por
+  um **proxy residencial** (túnel SSH reverso pela internet de casa) pra usar um IP de
+  verdade — veja [`docs/PROXY_RESIDENCIAL.md`](docs/PROXY_RESIDENCIAL.md).
