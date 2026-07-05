@@ -22,7 +22,7 @@ export function SettingsScreen() {
     await setToken(token.trim());
     try {
       await api.listPecas();
-      Alert.alert('Conectado!', 'Servidor e token OK. 🧡');
+      Alert.alert('Conectado!', 'Servidor e token OK.');
     } catch {
       Alert.alert('Ops', 'Salvei, mas não consegui conectar. Confira a URL e o token.');
     } finally {

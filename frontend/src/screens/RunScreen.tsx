@@ -24,9 +24,9 @@ type Parsed =
 function corEvento(nivel: string, low: string): { cor: string; forte: boolean } {
   let cor = '#D8D8D8';
   let forte = false;
-  if (nivel === 'ERROR' || low.includes('⛔') || low.includes('erro') || low.includes('falha')) {
+  if (nivel === 'ERROR' || low.includes('erro') || low.includes('falha')) {
     cor = colors.erro; forte = true;
-  } else if (low.includes('✓') || low.includes('atualizada') || low.includes('importada') || low.includes('vendida')) {
+  } else if (low.includes('atualizada') || low.includes('importada') || low.includes('vendida')) {
     cor = colors.ok;
   } else if (low.includes('peça') || low.includes('raspando') || low.includes('página')) {
     cor = colors.laranja;
@@ -76,19 +76,19 @@ function LogLinha({ raw }: { raw: string }) {
     return <Animated.View style={[wrapStyle, styles.divisorWrap]}><View style={styles.divisor} /></Animated.View>;
   }
   if (p.tipo === 'titulo') {
-    return <Animated.View style={wrapStyle}><Text style={styles.titulo}>{p.texto}</Text></Animated.View>;
+    return <Animated.View style={wrapStyle}><Text selectable style={styles.titulo}>{p.texto}</Text></Animated.View>;
   }
   if (p.tipo === 'kv') {
     return (
       <Animated.View style={[wrapStyle, styles.kvRow]}>
-        <Text style={styles.kvLabel}>{p.label}</Text>
-        <Text style={styles.kvValor}>{p.valor}</Text>
+        <Text selectable style={styles.kvLabel}>{p.label}</Text>
+        <Text selectable style={styles.kvValor}>{p.valor}</Text>
       </Animated.View>
     );
   }
   return (
     <Animated.View style={wrapStyle}>
-      <Text style={[styles.linha, { color: p.cor }, p.forte && styles.forte]}>
+      <Text selectable style={[styles.linha, { color: p.cor }, p.forte && styles.forte]}>
         {p.hora ? <Text style={styles.hora}>{p.hora}  </Text> : null}
         {p.texto}
       </Text>
@@ -176,7 +176,7 @@ export function RunScreen() {
         <Pulsar ativo={rodando}>
           <Pill texto={status} cor={statusCor[status] ?? colors.textoFraco} />
         </Pulsar>
-        {rodando && <Botao title="✕ Parar" cor={colors.erro} txtCor="#fff" onPress={parar} loading={parando} />}
+        {rodando && <Botao title="Parar" cor={colors.erro} txtCor="#fff" onPress={parar} loading={parando} />}
       </View>
       {progresso && progresso.total > 0 && (
         <View style={styles.barraWrap}>

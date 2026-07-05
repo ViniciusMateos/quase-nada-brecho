@@ -116,11 +116,11 @@ class RunManager:
         if run.params.get("import_cookies"):
             return
         if run.status == "erro":
-            titulo, corpo = "❌ Deu ruim", "O scraper do brechó parou com erro."
+            titulo, corpo = "Deu ruim", "O scraper do brechó parou com erro."
         elif run.status == "parado":
-            titulo, corpo = "⏹️ Parado", "O scraper do brechó foi parado."
+            titulo, corpo = "Parado", "O scraper do brechó foi parado."
         else:
-            titulo, corpo = "✅ Brechó atualizado", "Raspagem concluída e planilha sincronizada."
+            titulo, corpo = "Brechó atualizado", "Raspagem concluída e planilha sincronizada."
         try:
             await asyncio.to_thread(notify.enviar, titulo, corpo, {"runId": run.id})
         except Exception:

@@ -45,8 +45,8 @@ export function SincronizarScreen() {
             Lê os posts do @brechoquasenadaa, atualiza vendas/disponíveis e sincroniza os números
             do dashboard. As peças raspadas entram como histórico (não bagunçam o planejamento de drops).
           </Text>
-          <Botao title="🔄 Atualizar agora" onPress={() => rodar({}, 'Raspagem do brechó')} loading={iniciando} />
-          <Botao title="👀 Prévia (não grava)" cor={colors.card2} txtCor={colors.texto}
+          <Botao title="Atualizar agora" onPress={() => rodar({}, 'Raspagem do brechó')} loading={iniciando} />
+          <Botao title="Prévia (não grava)" cor={colors.card2} txtCor={colors.texto}
             onPress={() => rodar({ dry_run: true }, 'Prévia da raspagem')} />
         </Card>
       </Aparece>
@@ -57,7 +57,7 @@ export function SincronizarScreen() {
           <Text style={styles.desc}>
             Loga uma vez na conta do brechó pra liberar a raspagem. A sessão fica salva no servidor.
           </Text>
-          <Botao title="🔗 Conectar Instagram" cor={colors.marca} txtCor="#FFFFFF"
+          <Botao title="Conectar Instagram" cor={colors.marca} txtCor="#FFFFFF"
             onPress={() => nav.navigate('InstagramLogin')} />
         </Card>
       </Aparece>

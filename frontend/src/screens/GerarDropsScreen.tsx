@@ -64,7 +64,7 @@ export function GerarDropsScreen() {
       };
       const r = await api.gerarDrops(req);
       if (!r.ok) { Alert.alert('Ops', r.erro || 'Não consegui gerar.'); return; }
-      Alert.alert('Pronto! 🎉', `Gerei ${r.drops.length} drop${r.drops.length === 1 ? '' : 's'} e distribuí as peças.`, [
+      Alert.alert('Pronto!', `Gerei ${r.drops.length} drop${r.drops.length === 1 ? '' : 's'} e distribuí as peças.`, [
         { text: 'Ver drops', onPress: () => nav.navigate('Drops') },
       ]);
     } catch {
