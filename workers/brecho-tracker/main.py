@@ -19,9 +19,7 @@ Uso:
 import argparse
 import io
 import os
-import random
 import sys
-import time
 
 import config
 from iglib import IG, carregar_cookies, log
@@ -82,43 +80,38 @@ def modo_importar_cookies(path):
 
 
 def raspar(ig, boundary):
-    """Raspa a timeline (novo→antigo). Para quando os posts ficam mais antigos que o
-    boundary. Retorna lista de peças parseadas (divulgação é descartada)."""
+    """Raspa o feed do perfil e devolve as peças parseadas (novo→antigo).
+
+    Desce o perfil SCROLLANDO como humano e intercepta as respostas graphql que a
+    própria página dispara (iglib.raspar_perfil_scroll). O IG serve o scroll natural
+    sem estrangular, então uma run pega o feed inteiro — sem rate-limit, sem resume,
+    sem grinder. O boundary só corta as peças mais antigas que já estão 100% vendidas."""
     info = ig.perfil_info(config.BRECHO_USERNAME)
     log.info("Perfil @%s — id=%s — %s posts — privado=%s",
              info["username"], info["user_id"], info["posts"], info["is_private"])
-    if boundary:
-        log.info("Boundary ativo: vou raspar até o drop %s (mais antigos já vendidos).", boundary)
-    else:
-        log.info("Sem boundary (1º run / --full): raspando o feed inteiro.")
 
-    pecas, vistos, promo = [], 0, 0
-    max_id = None
-    parar = False
-    for pag in range(config.MAX_PAGINAS):
-        itens, max_id, mais = ig.feed_pagina(info["user_id"], max_id=max_id)
-        for it in itens:
-            vistos += 1
-            p = parser.parse_post(it)
-            if p is None:
-                promo += 1
-                continue
-            # boundary: se o post é mais antigo que o boundary, paramos (mas terminamos
-            # a página atual pra não cortar no meio de um drop)
-            if boundary and p["drop"] and p["drop"] < boundary:
-                parar = True
-                continue
-            pecas.append(p)
-        log.info("página %d: %d posts (acum: %d peças, %d divulgação)", pag + 1, len(itens),
-                 len(pecas), promo)
-        if parar:
-            log.info("Cheguei a posts anteriores ao boundary %s — parando a paginação.", boundary)
-            break
-        if not mais or not max_id:
-            log.info("Fim do feed.")
-            break
-        time.sleep(random.uniform(*config.DELAY_PAGINA))
-    log.info("Raspagem: %d posts vistos → %d peças, %d divulgação.", vistos, len(pecas), promo)
+    if boundary:
+        log.info("Boundary ativo: descarto peças anteriores ao drop %s (já vendidas).", boundary)
+    else:
+        log.info("Sem boundary (--full): raspando o feed inteiro.")
+
+    itens = ig.raspar_perfil_scroll(config.BRECHO_USERNAME)
+    itens.sort(key=lambda x: x.get("taken_at") or 0, reverse=True)   # novo→antigo
+
+    pecas, promo, cortadas = [], 0, 0
+    for it in itens:
+        p = parser.parse_post(it)
+        if p is None:
+            promo += 1
+            continue
+        if boundary and p["drop"] and p["drop"] < boundary:
+            cortadas += 1
+            continue
+        pecas.append(p)
+
+    log.info("Raspagem: %d posts vistos → %d peças, %d divulgação%s.",
+             len(itens), len(pecas), promo,
+             f", {cortadas} antes do boundary" if cortadas else "")
     return pecas
 
 

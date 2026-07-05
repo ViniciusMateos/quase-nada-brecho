@@ -10,6 +10,7 @@ Aqui só precisamos LER (raspar) — nenhuma ação de escrita no Instagram.
 import json
 import logging
 import os
+import random
 import sys
 import time
 
@@ -190,11 +191,15 @@ class IG:
             if not transitorio:                                # erro definitivo: não adianta insistir
                 raise ultimo
             if i < tentativas - 1:
-                # rate-limit explícito → pausa de minutos; erro de rede → segundos
-                espera = (75 * (i + 1)) if rate_limited else (8 * (i + 1))
+                # rate-limit → esperas longas (config); erro de rede → segundos.
+                if rate_limited:
+                    esp = config.RATE_LIMIT_ESPERAS
+                    espera = esp[min(i, len(esp) - 1)]
+                else:
+                    espera = 8 * (i + 1)
                 log.warning("IG estrangulou (%d/%d): %s — pausa %ds e tento de novo",
-                            i + 1, tentativas, str(ultimo)[:90], espera)
-                self.page.wait_for_timeout(espera * 1000)
+                            i + 1, tentativas, str(ultimo)[:90], int(espera))
+                self.page.wait_for_timeout(int(espera * 1000))
         raise ultimo
 
     # ───────────────── operações de leitura ─────────────────
@@ -226,6 +231,10 @@ class IG:
         """Uma página da timeline do usuário (REST feed/user).
 
         Retorna (itens, next_max_id, more_available).
+
+        ⚠️ LEGADO: chamar /feed/user em rajada faz o IG estrangular com 401
+        "Aguarde alguns minutos" depois de ~5 páginas. Preferir raspar_perfil_scroll,
+        que desce o perfil como humano e não toma bloqueio. Mantido só por referência.
         """
         count = count or config.POSTS_POR_PAGINA
         url = f"https://www.instagram.com/api/v1/feed/user/{user_id}/?count={count}"
@@ -234,3 +243,66 @@ class IG:
         data = self._get(url)
         itens = data.get("items", []) or []
         return itens, data.get("next_max_id"), bool(data.get("more_available"))
+
+    def raspar_perfil_scroll(self, username, max_scrolls=None, estavel_max=None):
+        """Raspa o feed do perfil SCROLLANDO como humano e interceptando as respostas
+        XHR (graphql) que a PRÓPRIA página dispara conforme carrega os posts.
+
+        Por que assim: chamar /feed/user na mão é um padrão de "burst" que o IG
+        detecta e estrangula (401 depois de ~5 páginas). Já o scroll natural do
+        perfil é servido numa boa — dá pra descer o feed inteiro sem bloqueio. Nós
+        só COLHEMOS o que o navegador baixou (mesma ideia do Fiddler, por dentro).
+
+        Os nós do GraphQL têm o mesmo shape do REST (code/caption/image_versions2/
+        carousel_media/taken_at), então parser.parse_post consome direto.
+
+        Devolve a lista de itens crus (dedup por code, ordem novo→antigo do feed).
+        """
+        max_scrolls = max_scrolls or config.SCROLL_MAX
+        estavel_max = estavel_max or config.SCROLL_ESTAVEL_MAX
+        capturados = {}
+
+        def _colher(o):
+            if isinstance(o, dict):
+                code = o.get("code")
+                # nó de post de topo: tem code + caption (carrossel-filho não tem caption própria)
+                if code and ("image_versions2" in o or "caption" in o):
+                    capturados.setdefault(code, o)
+                for v in o.values():
+                    _colher(v)
+            elif isinstance(o, list):
+                for v in o:
+                    _colher(v)
+
+        def _on_response(resp):
+            u = resp.url
+            if "instagram.com" not in u or "graphql" not in u:
+                return
+            try:
+                _colher(resp.json())
+            except Exception:
+                pass
+
+        self.page.on("response", _on_response)
+        try:
+            self.ir(f"https://www.instagram.com/{username}/")
+            estavel = ult = 0
+            for i in range(max_scrolls):
+                self.page.mouse.wheel(0, random.randint(3000, 6000))
+                self.page.wait_for_timeout(int(random.uniform(*config.SCROLL_PAUSA_MS)))
+                n = len(capturados)
+                if n > ult:                        # só loga quando chegou lote novo
+                    log.info("+%d posts (total: %d)", n - ult, n)
+                    estavel = 0
+                else:
+                    estavel += 1                   # scroll sem novidade (carregando/fim)
+                ult = n
+                if estavel >= estavel_max:
+                    log.info("Feed estabilizou em %d posts — fim do perfil.", n)
+                    break
+        finally:
+            try:
+                self.page.remove_listener("response", _on_response)
+            except Exception:
+                pass
+        return list(capturados.values())

@@ -53,15 +53,19 @@ USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 IG_APP_ID = "936619743392459"
 ASBD_ID = "359341"
 
-# ───────────────────── Raspagem ─────────────────────
-# Quantos posts puxar por página da timeline (a API aceita ~12).
+# ───────────────────── Raspagem (scroll) ─────────────────────
+# A raspagem oficial DESCE o perfil como humano e intercepta as respostas graphql
+# que a página dispara sozinha (ver iglib.raspar_perfil_scroll). O IG serve o scroll
+# natural sem estrangular — dá pra pegar o feed inteiro numa run, sem bloqueio.
+SCROLL_MAX = 120                 # teto de scrolls (segurança; para antes no "estável")
+SCROLL_ESTAVEL_MAX = 6           # nº de scrolls seguidos sem post novo p/ declarar fim
+SCROLL_PAUSA_MS = (1800, 3800)   # pausa humana entre scrolls (ms)
+
+# ── Legado (chamada /feed/user direta — estrangula; mantido só por referência) ──
 POSTS_POR_PAGINA = 12
-# Teto de segurança de páginas (12 * 60 = 720 posts) — a parada real é o boundary.
 MAX_PAGINAS = 60
-# Pausa humana entre páginas da timeline (segundos). Precisa ser generosa: a API
-# de feed do IG estrangula "bursts" (várias páginas em poucos segundos) e aí devolve
-# 401 "Aguarde alguns minutos" — independente do IP. 15-30s imita navegação real.
 DELAY_PAGINA = (15.0, 30.0)
+RATE_LIMIT_ESPERAS = (120.0, 240.0, 300.0)
 
 # ── Boundary (retomada) ──
 # Drops ANTERIORES a esta data já estão 100% vendidos → não precisa raspar de novo.
@@ -85,4 +89,5 @@ THUMB_W = 110                 # lado máximo da miniatura embutida na planilha (
 OUTPUT_DIR = os.path.join(_BASE, "output")
 IMAGENS_DIR = os.path.join(OUTPUT_DIR, "imagens")   # cache de miniaturas (regenerável)
 STATE_FILE = os.path.join(OUTPUT_DIR, "state.json")
+RESUME_FILE = os.path.join(OUTPUT_DIR, "resume.json")  # progresso da paginação (retoma se travar)
 LOG_FILE = os.path.join(OUTPUT_DIR, "run.log")
