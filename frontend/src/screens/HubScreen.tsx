@@ -49,9 +49,6 @@ export function HubScreen() {
             <Text style={styles.titulo}>Brechó</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={() => nav.navigate('Settings')}>
-          <Ionicons name="settings-outline" size={22} color={colors.textoFraco} />
-        </TouchableOpacity>
       </View>
 
       {erro && (

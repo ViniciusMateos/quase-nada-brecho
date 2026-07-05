@@ -98,7 +98,7 @@ export function DropsScreen() {
         }
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 8) * 40}>
-            <DropCard drop={item} apagando={apagando === item.id}
+            <DropCard drop={item} apagando={apagando != null && apagando === item.id}
               onPress={() => abrir(item)}
               onLongPress={item.tipo === 'manual'
                 ? (x, y) => setMenu({ x, y, drop: item })
@@ -160,7 +160,7 @@ function DropCard({ drop, onPress, onLongPress, apagando }:
         </View>
         {apagando && (
           <View style={styles.apagandoOverlay}>
-            <LoadingDog size={30} color={colors.erro} />
+            <LoadingDog size={30} color={colors.marca} />
           </View>
         )}
       </Card>

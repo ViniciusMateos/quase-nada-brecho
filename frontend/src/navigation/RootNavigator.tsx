@@ -52,7 +52,7 @@ export function RootNavigator() {
         }}>
         <Stack.Screen name="Hub" component={HubScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Pecas" component={PecasScreen} options={{ title: 'Peças' }} />
-        <Stack.Screen name="CarrosselPecas" component={CarrosselPecasScreen} options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="CarrosselPecas" component={CarrosselPecasScreen} options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
         <Stack.Screen name="Drops" component={DropsScreen} options={{ title: 'Drops' }} />
         <Stack.Screen name="DropDetail" component={DropDetailScreen}
           options={({ route }) => ({ title: route.params.nome })} />

@@ -165,7 +165,7 @@ export function DropDetailScreen() {
                 <Text style={styles.sub}>{brl(item.venda)}</Text>
               </View>
               {removendo === item.id ? (
-                <LoadingDog size={22} color={colors.erro} />
+                <LoadingDog size={22} color={colors.marca} />
               ) : (
                 <TouchableOpacity onPress={() => removerPeca(item)} hitSlop={8}>
                   <Ionicons name="remove-circle-outline" size={22} color={colors.erro} />
