@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 from playwright.sync_api import sync_playwright
 
@@ -74,9 +75,12 @@ def carregar_cookies(path):
               "domain": c.get("domain") or ".instagram.com", "path": c.get("path", "/"),
               "httpOnly": bool(c.get("httpOnly")), "secure": bool(c.get("secure", True)),
               "sameSite": ss_map.get(str(c.get("sameSite", "")).lower(), "Lax")}
+        # IMPORTANTE: o Chromium NÃO grava cookies de sessão (sem expires) no
+        # disco do perfil persistente — eles somem quando o browser fecha. Como
+        # o sessionid vem do celular marcado session:true, forçamos uma expiração
+        # futura pra ele PERSISTIR entre a run de import e a de raspagem.
         exp = c.get("expirationDate") or c.get("expires")
-        if exp and not c.get("session"):
-            ck["expires"] = int(float(exp))
+        ck["expires"] = int(float(exp)) if exp else int(time.time()) + 400 * 24 * 3600
         out.append(ck)
     return out
 
@@ -99,7 +103,7 @@ class IG:
         )
         if getattr(config, "PROXY", None):
             kwargs["proxy"] = config.PROXY
-            log.info("🌐 Proxy ativo: %s", config.PROXY.get("server"))
+            log.info("Proxy ativo: %s", config.PROXY.get("server"))
         if getattr(config, "USAR_CHROME_REAL", False):
             kwargs["channel"] = "chrome"
         try:
@@ -158,12 +162,40 @@ class IG:
         return {"appid": config.IG_APP_ID, "asbd": config.ASBD_ID,
                 "csrf": self.tokens.get("csrf"), "claim": self.tokens.get("claim", "0")}
 
-    def _get(self, url):
-        """GET same-origin pela página logada. Retorna dict JSON ou levanta."""
-        res = self.page.evaluate(JS_API_GET, {**self._base(), "url": url})
-        if res["status"] != 200:
-            raise RuntimeError(f"HTTP {res['status']} em {url} — corpo: {res['text'][:160]}")
-        return _parse_json(res["text"])
+    def _get(self, url, tentativas=4):
+        """GET same-origin pela página logada. Retorna dict JSON ou levanta.
+
+        O IG às vezes estrangula (rate-limit) requisições vindas de IP de
+        datacenter — o fetch da página rejeita com 'Failed to fetch' ou devolve
+        429. Em vez de abortar a raspagem inteira, espera um pouco (backoff
+        crescente) e tenta de novo algumas vezes."""
+        ultimo = None
+        for i in range(tentativas):
+            transitorio = True                                 # 'Failed to fetch'/rede = transitório
+            rate_limited = False
+            try:
+                res = self.page.evaluate(JS_API_GET, {**self._base(), "url": url})
+                if res["status"] == 200:
+                    return _parse_json(res["text"])
+                corpo = res.get("text", "") or ""
+                ultimo = RuntimeError(f"HTTP {res['status']} em {url} — corpo: {corpo[:160]}")
+                baixo = corpo.lower()
+                # IG estrangula IP de datacenter com 401 "Aguarde alguns minutos" +
+                # require_login — NÃO é sessão morta, é rate-limit temporário.
+                rate_limited = any(s in baixo for s in (
+                    "aguarde", "wait a few", "try again", "please wait", "require_login"))
+                transitorio = res["status"] in (429, 500, 502, 503) or rate_limited
+            except Exception as e:
+                ultimo = e
+            if not transitorio:                                # erro definitivo: não adianta insistir
+                raise ultimo
+            if i < tentativas - 1:
+                # rate-limit explícito → pausa de minutos; erro de rede → segundos
+                espera = (75 * (i + 1)) if rate_limited else (8 * (i + 1))
+                log.warning("IG estrangulou (%d/%d): %s — pausa %ds e tento de novo",
+                            i + 1, tentativas, str(ultimo)[:90], espera)
+                self.page.wait_for_timeout(espera * 1000)
+        raise ultimo
 
     # ───────────────── operações de leitura ─────────────────
     def perfil_info(self, username):

@@ -28,6 +28,21 @@ from iglib import IG, carregar_cookies, log
 import parser
 import planilha
 
+COOKIES_FILE = "imported_cookies.json"
+
+
+def _reinjetar_sessao(ig):
+    """Re-injeta os cookies do arquivo no contexto ANTES de navegar. O Chromium
+    não grava cookies de sessão no disco do perfil persistente, então não dá pra
+    confiar que o sessionid do `--import-cookies` sobreviva até a run de raspagem.
+    Re-injetando aqui, toda raspagem começa logada sem depender da persistência."""
+    if os.path.exists(COOKIES_FILE):
+        try:
+            ig.ctx.add_cookies(carregar_cookies(COOKIES_FILE))
+            log.info("Sessão re-injetada de %s.", COOKIES_FILE)
+        except Exception as e:
+            log.warning("Falha re-injetando cookies (%s): %s", COOKIES_FILE, e)
+
 
 def baixar_thumbs(ig, pecas):
     """Baixa a foto de capa de cada peça e salva uma miniatura local (cache).
@@ -60,7 +75,7 @@ def modo_importar_cookies(path):
     log.info("Importando %d cookies de %s…", len(cookies), path)
     with IG() as ig:
         if ig.importar_cookies(cookies):
-            log.info("✓ Sessão logada! Rode `python main.py --dry-run`.")
+            log.info("Sessão logada! Rode `python main.py --dry-run`.")
         else:
             log.warning("Importou, mas não achei sessionid. Exporte os cookies do instagram.com "
                         "COM uma conta logada.")
@@ -140,6 +155,7 @@ def run(dry=False, full=False):
 
     log.info("Abrindo navegador (Chrome)… isso leva alguns segundos.")
     with IG() as ig:
+        _reinjetar_sessao(ig)
         ig.ir("https://www.instagram.com/")
         if not ig.logado():
             log.error("Sem sessão logada. Rode `--import-cookies <arquivo.json>` primeiro.")
@@ -163,7 +179,7 @@ def run(dry=False, full=False):
         if n:
             log.info("Backfill da antiga: %d valores (compra/venda) preenchidos.", n)
     k = planilha.salvar(db)
-    log.info("✓ Planilha atualizada: %s", config.PLANILHA_SAIDA)
+    log.info("Planilha atualizada: %s", config.PLANILHA_SAIDA)
     log.info("   novas: %d | atualizadas: %d | recém-vendidas: %d",
              stats["novas"], stats["atualizadas"], stats["recem_vendidas"])
     log.info("   faturamento R$ %.2f | projeção R$ %.2f", k["faturamento total"],
@@ -189,7 +205,7 @@ def rematch():
         return
     n = planilha.backfill_antiga(db, antiga)
     planilha.salvar(db)
-    log.info("✓ Rematch: %d valores (compra/venda) preenchidos pela antiga. Planilha atualizada.", n)
+    log.info("Rematch: %d valores (compra/venda) preenchidos pela antiga. Planilha atualizada.", n)
 
 
 def main():
@@ -211,7 +227,7 @@ def main():
     except KeyboardInterrupt:
         log.info("Interrompido.")
     except Exception as e:
-        log.error("⛔ erro: %s", e)
+        log.error("erro: %s", e)
         import traceback
         traceback.print_exc()
         sys.exit(2)

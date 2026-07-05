@@ -33,8 +33,18 @@ def _carregar_proxy():
 
 
 PROXY = _carregar_proxy()
-HEADLESS = False                       # headed é menos detectável
-USAR_CHROME_REAL = True                # usa o Chrome instalado (channel="chrome")
+
+
+def _envbool(nome, padrao):
+    v = os.environ.get(nome)
+    return padrao if v is None else v.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Default = PC (headed + Chrome real, menos detectável). No SERVIDOR headless (ARM,
+# sem display), rode com IG_HEADLESS=1 e IG_CHROME_REAL=0 no ambiente (systemd
+# Environment= ou export). Assim subir este arquivo pro server NÃO quebra o headless.
+HEADLESS = _envbool("IG_HEADLESS", False)          # headed é menos detectável (PC)
+USAR_CHROME_REAL = _envbool("IG_CHROME_REAL", True)  # usa o Chrome instalado (channel="chrome")
 LOCALE = "pt-BR"
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
@@ -48,8 +58,10 @@ ASBD_ID = "359341"
 POSTS_POR_PAGINA = 12
 # Teto de segurança de páginas (12 * 60 = 720 posts) — a parada real é o boundary.
 MAX_PAGINAS = 60
-# Pausa humana entre páginas da timeline (segundos).
-DELAY_PAGINA = (2.0, 5.0)
+# Pausa humana entre páginas da timeline (segundos). Precisa ser generosa: a API
+# de feed do IG estrangula "bursts" (várias páginas em poucos segundos) e aí devolve
+# 401 "Aguarde alguns minutos" — independente do IP. 15-30s imita navegação real.
+DELAY_PAGINA = (15.0, 30.0)
 
 # ── Boundary (retomada) ──
 # Drops ANTERIORES a esta data já estão 100% vendidos → não precisa raspar de novo.

@@ -21,7 +21,8 @@ PLANILHA = "brecho_tracker.xlsx"
 
 # posição das colunas na aba "peças" (mesmo layout gerado pelo worker)
 COL = {"code": 0, "drop": 1, "item": 3, "nome": 4, "compra": 5, "venda": 6,
-       "tamanho": 7, "condicao": 11, "vendida": 12, "url": 13, "imagem_url": 15}
+       "tamanho": 7, "largura": 8, "comprimento": 9, "circunferencia": 10,
+       "condicao": 11, "vendida": 12, "url": 13, "imagem_url": 15}
 
 
 def worker_dir():
@@ -91,6 +92,9 @@ def ler_planilha():
             "compra": r[COL["compra"]],
             "venda": r[COL["venda"]],
             "tamanho": r[COL["tamanho"]],
+            "largura": r[COL["largura"]],
+            "comprimento": r[COL["comprimento"]],
+            "circunferencia": r[COL["circunferencia"]],
             "condicao": r[COL["condicao"]],
             "vendida": str(r[COL["vendida"]]).strip().lower() == "sim",
             "imagem_url": _limpo(r[COL["imagem_url"]]) or _post_url(r[COL["code"]]),
