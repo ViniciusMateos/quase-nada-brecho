@@ -187,9 +187,10 @@ def gerar(payload):
 
 # ─────────────────── histórico unificado + saldo ─────────────────
 def _saldo(pecas):
+    from pecas import _receita   # consignada conta só a % que fica pra mim
     total = len(pecas)
     vend = [p for p in pecas if p["vendida"]]
-    faturamento = sum(p["venda"] for p in vend)
+    faturamento = sum(_receita(p) for p in vend)
     cmv = sum(p["compra"] for p in vend)          # custo do que vendeu
     gasto = sum(p["compra"] for p in pecas)       # investido no drop inteiro
     return {

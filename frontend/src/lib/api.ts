@@ -1,15 +1,23 @@
 import { baseUrl, http } from '@/lib/apiClient';
 import { getToken } from '@/lib/tokenStorage';
+import { env } from '@/config/env';
 
 export type Peca = {
   id: number;
   nome: string | null;
   item: string | null;
   tamanho: string | null;
+  largura: string | null;
+  comprimento: string | null;
+  medida: string | null;
+  observacao: string | null;
   condicao: string | null;
   compra: number;
   venda: number;
   vendida: boolean;
+  consignado: boolean;
+  consig_pct: number | null;
+  so_manual: boolean;
   imagem_url: string | null;
   drop_id: number | null;
   drop_nome: string | null;
@@ -19,7 +27,7 @@ export type Peca = {
   postado_em: string | null;
 };
 export type PecaCampos = Partial<Pick<Peca,
-  'nome' | 'item' | 'tamanho' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id'>>;
+  'nome' | 'item' | 'tamanho' | 'largura' | 'comprimento' | 'medida' | 'observacao' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id' | 'consignado' | 'consig_pct' | 'so_manual'>>;
 
 export type Drop = {
   id: number;
@@ -123,6 +131,6 @@ export const api = {
 // URL do WebSocket de log (http→ws, com o token na query).
 export async function logsWsUrl(runId: string): Promise<string> {
   const base = (await baseUrl()).replace(/^http/, 'ws');
-  const token = await getToken();
+  const token = (await getToken()) || env.apiToken;
   return `${base}/runs/${runId}/logs?token=${encodeURIComponent(token ?? '')}`;
 }

@@ -50,6 +50,13 @@ _MIGRACOES = [
     ("pecas", "origem", "TEXT NOT NULL DEFAULT 'manual'"),
     ("pecas", "code", "TEXT"),
     ("pecas", "postado_em", "TEXT"),
+    ("pecas", "largura", "TEXT"),   # medida padrão: largura (l XXcm na legenda)
+    ("pecas", "comprimento", "TEXT"),  # medida padrão: comprimento (c XXcm na legenda)
+    ("pecas", "medida", "TEXT"),   # medidas especiais (JSON: circunferência do boné, palmilha do tênis)
+    ("pecas", "observacao", "TEXT"),  # observação livre sobre a peça (vai no template do post)
+    ("pecas", "consignado", "INTEGER NOT NULL DEFAULT 0"),  # peça de terceiro (só recebo uma %)
+    ("pecas", "consig_pct", "REAL"),  # % do valor da venda que fica pra mim (ex: 40)
+    ("pecas", "so_manual", "INTEGER NOT NULL DEFAULT 0"),  # peça travada: o scraper NÃO atualiza
 ]
 
 
