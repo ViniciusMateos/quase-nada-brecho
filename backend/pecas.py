@@ -27,7 +27,8 @@ def _medida_json_circ(circ):
     return json.dumps([{"tipo": "Circunferência", "valor": s}], ensure_ascii=False) if s else None
 
 EDITAVEIS = ("nome", "item", "tamanho", "largura", "comprimento", "medida", "observacao",
-             "condicao", "compra", "venda", "vendida", "drop_id", "consignado", "consig_pct", "so_manual")
+             "condicao", "compra", "venda", "vendida", "drop_id", "consignado", "consig_pct",
+             "consig_tipo", "consig_valor", "so_manual", "template")
 
 
 def _num(v):
@@ -37,14 +38,24 @@ def _num(v):
         return 0.0
 
 
+def _campo(p, k):
+    if not _tem(p, k):
+        return None
+    return p.get(k) if hasattr(p, "get") else p[k]
+
+
 def _receita(p):
-    """Faturamento efetivo: se a peça é consignada, só conta a % que fica pra mim."""
-    v = _num(p.get("venda") if hasattr(p, "get") else p["venda"])
-    consig = (p.get("consignado") if hasattr(p, "get") else p["consignado"]) if _tem(p, "consignado") else 0
-    pct = (p.get("consig_pct") if hasattr(p, "get") else p["consig_pct"]) if _tem(p, "consig_pct") else None
-    if consig and pct:
-        return v * (_num(pct) / 100.0)
-    return v
+    """Faturamento efetivo: se a peça é consignada, só conta a parte que fica pra mim —
+    seja uma % da venda (modo 'pct') ou um valor fixo em R$ (modo 'valor')."""
+    v = _num(_campo(p, "venda"))
+    if not _campo(p, "consignado"):
+        return v
+    tipo = _campo(p, "consig_tipo") or "pct"
+    if tipo == "valor":
+        val = _num(_campo(p, "consig_valor"))
+        return min(val, v) if val else v   # recebe o fixo, nunca mais que o preço da venda
+    pct = _campo(p, "consig_pct")
+    return v * (_num(pct) / 100.0) if pct else v
 
 
 def _tem(p, k):
@@ -68,8 +79,10 @@ def _coagir(campos):
             out[k] = 1 if (v is True or str(v).strip().lower() in ("sim", "true", "1")) else 0
         elif k == "drop_id":
             out[k] = int(v) if v not in (None, "", "null") else None
-        elif k == "consig_pct":
+        elif k in ("consig_pct", "consig_valor"):
             out[k] = _num(v) if v not in (None, "", "null") else None
+        elif k == "consig_tipo":
+            out[k] = "valor" if str(v).strip().lower() == "valor" else "pct"
         else:
             out[k] = v
     return out
@@ -95,7 +108,10 @@ def _peca_dict(r):
         "vendida": bool(r["vendida"]),
         "consignado": bool(r["consignado"]) if "consignado" in r.keys() else False,
         "consig_pct": r["consig_pct"] if "consig_pct" in r.keys() else None,
+        "consig_tipo": (r["consig_tipo"] if "consig_tipo" in r.keys() else None) or "pct",
+        "consig_valor": r["consig_valor"] if "consig_valor" in r.keys() else None,
         "so_manual": bool(r["so_manual"]) if "so_manual" in r.keys() else False,
+        "template": r["template"] if "template" in r.keys() else None,
         # foto local (upload) tem prioridade; senão usa a URL externa (CDN do IG)
         "imagem_url": _url(r["imagem"]) or r["imagem_url"],
         "drop_id": r["drop_id"],
@@ -131,9 +147,11 @@ def add(campos):
     with conn() as c:
         cur = c.execute(
             """INSERT INTO pecas (nome, item, tamanho, largura, comprimento, medida, observacao,
-                                  condicao, compra, venda, vendida, drop_id, consignado, consig_pct, so_manual)
+                                  condicao, compra, venda, vendida, drop_id, consignado, consig_pct,
+                                  consig_tipo, consig_valor, so_manual, template)
                VALUES (:nome, :item, :tamanho, :largura, :comprimento, :medida, :observacao,
-                       :condicao, :compra, :venda, :vendida, :drop_id, :consignado, :consig_pct, :so_manual)""",
+                       :condicao, :compra, :venda, :vendida, :drop_id, :consignado, :consig_pct,
+                       :consig_tipo, :consig_valor, :so_manual, :template)""",
             {
                 "nome": d.get("nome"), "item": d.get("item"), "tamanho": d.get("tamanho"),
                 "largura": d.get("largura"), "comprimento": d.get("comprimento"),
@@ -142,7 +160,8 @@ def add(campos):
                 "venda": d.get("venda", 0.0), "vendida": d.get("vendida", 0),
                 "drop_id": d.get("drop_id"),
                 "consignado": d.get("consignado", 0), "consig_pct": d.get("consig_pct"),
-                "so_manual": d.get("so_manual", 0),
+                "consig_tipo": d.get("consig_tipo", "pct"), "consig_valor": d.get("consig_valor"),
+                "so_manual": d.get("so_manual", 0), "template": d.get("template"),
             },
         )
         pid = cur.lastrowid
@@ -191,6 +210,7 @@ def upsert_scraper(items):
       - senão → insere nova.
     Devolve stats {novas, atualizadas, reconciliadas, total}."""
     novas = atualizadas = reconciliadas = 0
+    publicar = {}   # drop_id (manual) -> data do post no Insta: as peças do drop apareceram lá
     with conn() as c:
         for it in items:
             code = it.get("code")
@@ -208,13 +228,15 @@ def upsert_scraper(items):
             mj = _medida_json_circ(it.get("circunferencia"))
             if mj:
                 campos["medida"] = mj
-            existe = c.execute("SELECT id, so_manual FROM pecas WHERE code = ?", (code,)).fetchone()
+            existe = c.execute("SELECT id, so_manual, drop_id FROM pecas WHERE code = ?", (code,)).fetchone()
             if existe:
                 if existe["so_manual"]:
                     continue   # peça travada como manual: scraper não atualiza
                 sets = ", ".join(f"{k} = :{k}" for k in campos)
                 c.execute(f"UPDATE pecas SET {sets} WHERE code = :code", {**campos, "code": code})
                 atualizadas += 1
+                if existe["drop_id"] is not None and campos.get("postado_em"):
+                    publicar[existe["drop_id"]] = campos["postado_em"]
                 continue
 
             # reconciliação: peça manual planejada (sem code) de mesmo nome vira scraper.
@@ -223,13 +245,24 @@ def upsert_scraper(items):
             match = None
             if nome:
                 match = c.execute(
-                    "SELECT id FROM pecas WHERE origem = 'manual' AND code IS NULL AND so_manual = 0 "
+                    "SELECT id, drop_id FROM pecas WHERE origem = 'manual' AND code IS NULL AND so_manual = 0 "
                     "AND lower(trim(nome)) = ?", (nome,)).fetchone()
             if match:
                 sets = ", ".join(f"{k} = :{k}" for k in campos)
-                c.execute(
-                    f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code, drop_id = NULL "
-                    "WHERE id = :id", {**campos, "code": code, "id": match["id"]})
+                if match["drop_id"] is not None:
+                    # a peça estava planejada num drop manual e apareceu no Insta → o drop foi
+                    # publicado. Ela FICA no drop (só vira 'scraper' pra ganhar code/vendida do post),
+                    # e o drop é marcado publicado + data sincronizada com o Insta (mais abaixo).
+                    c.execute(
+                        f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
+                        {**campos, "code": code, "id": match["id"]})
+                    if campos.get("postado_em"):
+                        publicar[match["drop_id"]] = campos["postado_em"]
+                else:
+                    # peça planejada sem drop → vira histórico puro (agrupa pela data do post)
+                    c.execute(
+                        f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code, drop_id = NULL "
+                        "WHERE id = :id", {**campos, "code": code, "id": match["id"]})
                 reconciliadas += 1
             else:
                 c.execute(
@@ -242,7 +275,13 @@ def upsert_scraper(items):
                     {**campos, "medida": campos.get("medida"), "compra": _num(it.get("compra")),
                      "venda": _num(it.get("venda")), "code": code})
                 novas += 1
+
+        # drops manuais cujas peças apareceram no Insta → publicado + data do Insta (fonte da verdade)
+        for did, data_post in publicar.items():
+            c.execute("UPDATE drops SET status = 'publicado', data = ? WHERE id = ?", (data_post, did))
+
     return {"novas": novas, "atualizadas": atualizadas, "reconciliadas": reconciliadas,
+            "drops_publicados": len(publicar),
             "total": novas + atualizadas + reconciliadas}
 
 
@@ -293,24 +332,34 @@ def dashboard():
     if not pecas:
         return {"existe": False, "kpis": None, "por_drop": [], "por_categoria": []}
 
-    # peça do app agrupa pelo nome do drop; peça raspada (sem drop do app) pela data do post
-    for p in pecas:
-        p["_drop_label"] = p.get("drop_nome") or p.get("postado_em") or "—"
-    gd = _por_grupo(pecas, "_drop_label")
-    por_drop = sorted(
-        [{"drop": k, **{kk: round(vv, 2) if isinstance(vv, float) else vv for kk, vv in v.items()}}
-         for k, v in gd.items()],
-        key=lambda x: x["faturamento"], reverse=True)
-
-    # anexa a numeração cronológica do drop (mesma de drops.listar_todos)
+    # agrupa por drop de forma ÚNICA: peça em drop manual pelo drop_id (todos os drops
+    # manuais se chamam "rascunho", então não dá pra agrupar por nome), peça raspada sem
+    # drop pela data do post. O rótulo/numeração vem do resumo unificado (drops.listar_todos).
     import drops as _drops
-    num_por_label = {}
-    for d in _drops.listar_todos()["drops"]:
-        lbl = d["nome"] if d["nome"] else d["data"]
-        if lbl is not None:
-            num_por_label[str(lbl)] = d["numero"]
-    for linha in por_drop:
-        linha["numero"] = num_por_label.get(str(linha["drop"]))
+    resumo = _drops.listar_todos()["drops"]
+    manual_por_id = {d["id"]: d for d in resumo if d["tipo"] == "manual"}
+    hist_por_data = {d["data"]: d for d in resumo if d["tipo"] == "historico"}
+    for p in pecas:
+        if p.get("drop_id") is not None:
+            p["_gkey"] = f"m{p['drop_id']}"
+        elif p.get("postado_em"):
+            p["_gkey"] = f"h{p['postado_em']}"
+        else:
+            p["_gkey"] = "—"
+    gd = _por_grupo(pecas, "_gkey")
+
+    por_drop = []
+    for k, v in gd.items():
+        linha = {kk: round(vv, 2) if isinstance(vv, float) else vv for kk, vv in v.items()}
+        d = None
+        if k.startswith("m"):
+            d = manual_por_id.get(int(k[1:]))
+        elif k.startswith("h"):
+            d = hist_por_data.get(k[1:])
+        linha["numero"] = d["numero"] if d else None
+        linha["drop"] = (d["data"] if d else None) or ""
+        por_drop.append(linha)
+    por_drop.sort(key=lambda x: x["faturamento"], reverse=True)
 
     gc = _por_grupo(pecas, "item")
     por_categoria = sorted(

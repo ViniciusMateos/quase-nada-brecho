@@ -225,7 +225,9 @@ def listar_todos():
 
     hist = defaultdict(list)
     for p in pecas:
-        if p.get("origem") == "scraper":
+        # histórico = peça do scraper SEM drop manual (as que ficaram num drop manual
+        # publicado aparecem no próprio drop, não no histórico — senão contava 2x)
+        if p.get("origem") == "scraper" and p.get("drop_id") is None:
             hist[p.get("postado_em")].append(p)
     for data, ps in hist.items():
         out.append({"tipo": "historico", "id": None, "nome": None, "data": data,
@@ -245,6 +247,7 @@ def pecas_por_data(data):
     with conn() as c:
         pr = rows(c.execute(
             "SELECT p.*, NULL AS drop_nome, NULL AS drop_data FROM pecas p "
-            "WHERE p.origem = 'scraper' AND p.postado_em IS ? ORDER BY p.vendida ASC, p.venda DESC",
+            "WHERE p.origem = 'scraper' AND p.drop_id IS NULL AND p.postado_em IS ? "
+            "ORDER BY p.vendida ASC, p.venda DESC",
             (data,)))
     return {"pecas": [_peca_dict(r) for r in pr]}
