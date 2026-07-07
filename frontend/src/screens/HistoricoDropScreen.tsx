@@ -19,6 +19,16 @@ function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
   return `${n < 0 ? '-' : ''}R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${dec}`;
 }
+// consignado: quanto recebo (% da venda ou valor fixo) + a % equivalente
+function recebeConsig(p: Peca): number {
+  if (p.consig_tipo === 'valor') return Math.min(p.consig_valor || 0, p.venda);
+  return p.venda * ((p.consig_pct || 0) / 100);
+}
+function pctStr(recebe: number, venda: number): string {
+  if (venda <= 0) return '0%';
+  const p = (recebe / venda) * 100;
+  return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
+}
 
 export function HistoricoDropScreen() {
   const insets = useSafeAreaInsets();
@@ -37,8 +47,10 @@ export function HistoricoDropScreen() {
 
   const vend = pecas.filter((p) => p.vendida);
   const faturamento = vend.reduce((s, p) => s + p.venda, 0);
+  const projecao = pecas.reduce((s, p) => s + p.venda, 0);   // faturamento se tudo vender
   const cmv = vend.reduce((s, p) => s + p.compra, 0);
   const gasto = pecas.reduce((s, p) => s + p.compra, 0);
+  const disponiveis = pecas.length - vend.length;
   const img = (u: string | null) => (u ? { uri: /^https?:/.test(u) ? u : `${base}${u}` } : undefined);
 
   return (
@@ -52,13 +64,16 @@ export function HistoricoDropScreen() {
             <Text style={styles.data}>postado {fmtData(params.data)}</Text>
             <Linha label="Peças" valor={`${vend.length}/${pecas.length} vendidas`} />
             <Linha label="Faturamento" valor={brl(faturamento)} cor={colors.ok} />
+            {disponiveis > 0 && (
+              <Linha label="Projeção (se vender tudo)" valor={brl(projecao)} cor={colors.marca} />
+            )}
             <Linha label="Gasto do drop" valor={brl(gasto)} cor={colors.textoFraco} />
             <Linha label="Lucro líquido" valor={brl(faturamento - cmv)} cor={colors.marca} forte />
           </Card>
         }
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 10) * 40}>
-            <Pressavel style={styles.linhaPeca} onPress={() => setEditarPeca(item)}>
+            <Pressavel style={StyleSheet.flatten([styles.linhaPeca, item.consignado && styles.linhaConsig])} onPress={() => setEditarPeca(item)}>
               {item.imagem_url ? (
                 <Image source={img(item.imagem_url)} style={styles.thumb} contentFit="cover" transition={150} />
               ) : (
@@ -67,8 +82,20 @@ export function HistoricoDropScreen() {
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.nome} numberOfLines={1}>{item.nome || item.item || `Peça ${item.id}`}</Text>
-                <Text style={styles.sub}>{[item.item, item.tamanho && `tam ${item.tamanho}`].filter(Boolean).join(' · ') || '—'}</Text>
+                <View style={styles.nomeRow}>
+                  <Text style={styles.nome} numberOfLines={1}>{item.nome || item.item || `Peça ${item.id}`}</Text>
+                  {item.consignado && (
+                    <View style={styles.consigTag}>
+                      <Ionicons name="people" size={9} color="#FFFFFF" />
+                      <Text style={styles.consigTagTxt}>consig</Text>
+                    </View>
+                  )}
+                </View>
+                {item.consignado && (
+                  <Text style={styles.recebe}>
+                    recebe {brl(recebeConsig(item))} {item.consig_tipo === 'valor' ? `(fixo · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}
+                  </Text>
+                )}
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.venda}>{brl(item.venda)}</Text>
@@ -101,9 +128,14 @@ const styles = StyleSheet.create({
   linhaLabel: { color: colors.textoFraco, fontSize: 13 },
   linhaValor: { color: colors.texto, fontSize: 14, fontWeight: '700' },
   linhaPeca: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border },
+  linhaConsig: { borderColor: colors.marca },
   thumb: { width: 44, height: 55, borderRadius: 8, backgroundColor: colors.card2 },
   thumbVazia: { alignItems: 'center', justifyContent: 'center' },
-  nome: { color: colors.texto, fontSize: 15, fontWeight: '600' },
+  nomeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nome: { color: colors.texto, fontSize: 15, fontWeight: '600', flexShrink: 1 },
+  consigTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.marca, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
+  consigTagTxt: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
+  recebe: { color: colors.marca, fontSize: 12, fontWeight: '600', marginTop: 2 },
   sub: { color: colors.textoFraco, fontSize: 12, marginTop: 2 },
   venda: { color: colors.texto, fontSize: 14, fontWeight: '700' },
   tag: { fontSize: 11, marginTop: 2, fontWeight: '600' },

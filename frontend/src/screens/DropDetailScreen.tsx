@@ -12,6 +12,7 @@ import { colors, statusDrop } from '@/theme';
 import { Aparece, Botao, Pressavel } from '@/ui/components';
 import { BottomSheet } from '@/ui/BottomSheet';
 import { EditorPeca } from '@/ui/EditorPeca';
+import { MenuContexto } from '@/ui/MenuContexto';
 import { CampoData } from '@/ui/CampoData';
 import { LoadingDog, TelaCarregando } from '@/ui/LoadingDog';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -21,6 +22,16 @@ type R = RouteProp<RootStackParamList, 'DropDetail'>;
 function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
   return `R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${dec}`;
+}
+// consignado: quanto recebo (% da venda ou valor fixo) + a % equivalente
+function recebeConsig(p: Peca): number {
+  if (p.consig_tipo === 'valor') return Math.min(p.consig_valor || 0, p.venda);
+  return p.venda * ((p.consig_pct || 0) / 100);
+}
+function pctStr(recebe: number, venda: number): string {
+  if (venda <= 0) return '0%';
+  const p = (recebe / venda) * 100;
+  return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
 }
 const STATUS_ORDEM = ['rascunho', 'agendado', 'publicado'];
 
@@ -40,6 +51,7 @@ export function DropDetailScreen() {
   const [adicionando, setAdicionando] = useState(false);
   const [removendo, setRemovendo] = useState<number | null>(null);
   const [editarPeca, setEditarPeca] = useState<Peca | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; peca: Peca } | null>(null);
 
   useEffect(() => { baseUrl().then(setBase); }, []);
 
@@ -60,7 +72,7 @@ export function DropDetailScreen() {
     try {
       const d = await api.editDrop(params.dropId, { nome: nome.trim() || 'Drop', data: data.trim() || null, status });
       setDrop(d);
-      nav.setOptions({ title: d.nome });
+      // o header é "Drop N" (param da rota) — não sobrescrever com o nome cru ("rascunho")
     } catch {
       Alert.alert('Ops', 'Não consegui salvar o drop.');
     } finally {
@@ -152,7 +164,9 @@ export function DropDetailScreen() {
         ListEmptyComponent={<Text style={styles.vazio}>Nenhuma peça nesse drop ainda.</Text>}
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 10) * 45}>
-            <Pressavel style={styles.linha} onPress={() => setEditarPeca(item)}>
+            <Pressavel style={StyleSheet.flatten([styles.linha, item.consignado && styles.linhaConsig])}
+              onPress={() => setEditarPeca(item)}
+              onLongPress={(x, y) => setMenu({ x, y, peca: item })}>
               {item.imagem_url ? (
                 <Image source={img(item.imagem_url)} style={styles.thumb} contentFit="cover" transition={150} />
               ) : (
@@ -161,15 +175,30 @@ export function DropDetailScreen() {
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.nome} numberOfLines={1}>{item.nome || item.item || `Peça ${item.id}`}</Text>
-                <Text style={styles.sub}>{brl(item.venda)}</Text>
+                <View style={styles.nomeRow}>
+                  <Text style={styles.nome} numberOfLines={1}>{item.nome || item.item || `Peça ${item.id}`}</Text>
+                  {item.consignado && (
+                    <View style={styles.consigTag}>
+                      <Ionicons name="people" size={9} color="#FFFFFF" />
+                      <Text style={styles.consigTagTxt}>consig</Text>
+                    </View>
+                  )}
+                </View>
+                {item.consignado && (
+                  <Text style={styles.recebe}>
+                    recebe {brl(recebeConsig(item))} {item.consig_tipo === 'valor' ? `(fixo · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}
+                  </Text>
+                )}
               </View>
               {removendo === item.id ? (
                 <LoadingDog size={22} color={colors.marca} />
               ) : (
-                <TouchableOpacity onPress={() => removerPeca(item)} hitSlop={8}>
-                  <Ionicons name="remove-circle-outline" size={22} color={colors.erro} />
-                </TouchableOpacity>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.venda}>{brl(item.venda)}</Text>
+                  <Text style={[styles.tag, { color: item.vendida ? colors.ok : colors.textoFraco }]}>
+                    {item.vendida ? 'vendida' : 'disponível'}
+                  </Text>
+                </View>
               )}
             </Pressavel>
           </Aparece>
@@ -220,6 +249,14 @@ export function DropDetailScreen() {
       </BottomSheet>
 
       <EditorPeca visible={!!editarPeca} peca={editarPeca} onClose={() => setEditarPeca(null)} onSaved={carregar} />
+
+      <MenuContexto
+        visible={!!menu} x={menu?.x ?? 0} y={menu?.y ?? 0} onClose={() => setMenu(null)}
+        itens={menu ? [
+          { label: 'Editar', icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setTimeout(() => setEditarPeca(p), 180); } },
+          { label: 'Remover do drop', icon: 'remove-circle-outline', cor: colors.erro, onPress: () => { const p = menu.peca; setMenu(null); removerPeca(p); } },
+        ] : []}
+      />
     </View>
   );
 }
@@ -237,10 +274,17 @@ const styles = StyleSheet.create({
   addPecas: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.marca, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   addPecasTxt: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border },
+  linhaConsig: { borderColor: colors.marca },
   thumb: { width: 44, height: 55, borderRadius: 8, backgroundColor: colors.card2 },
   thumbVazia: { alignItems: 'center', justifyContent: 'center' },
-  nome: { color: colors.texto, fontSize: 15, fontWeight: '600' },
+  nomeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nome: { color: colors.texto, fontSize: 15, fontWeight: '600', flexShrink: 1 },
+  consigTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.marca, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
+  consigTagTxt: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
+  recebe: { color: colors.marca, fontSize: 12, fontWeight: '600', marginTop: 2 },
   sub: { color: colors.textoFraco, fontSize: 12, marginTop: 2 },
+  venda: { color: colors.texto, fontSize: 14, fontWeight: '700' },
+  tag: { fontSize: 11, marginTop: 2, fontWeight: '600' },
   vazio: { color: colors.textoFraco, textAlign: 'center', marginTop: 24, lineHeight: 20 },
   excluirInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4 },
   excluirTxt: { color: colors.erro, fontSize: 14, fontWeight: '600' },

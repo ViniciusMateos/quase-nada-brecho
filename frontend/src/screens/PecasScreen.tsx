@@ -26,9 +26,16 @@ function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
   return `R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${dec}`;
 }
-// quanto eu recebo de uma peça consignada (só a %)
-function recebeConsig(venda: number, pct: number | null): number {
-  return venda * ((pct || 0) / 100);
+// quanto eu recebo de uma peça consignada — % da venda ou valor fixo (nunca mais que a venda)
+function recebeConsig(p: Peca): number {
+  if (p.consig_tipo === 'valor') return Math.min(p.consig_valor || 0, p.venda);
+  return p.venda * ((p.consig_pct || 0) / 100);
+}
+// % equivalente do que recebo sobre a venda (pra mostrar a % quando é valor fixo)
+function pctStr(recebe: number, venda: number): string {
+  if (venda <= 0) return '0%';
+  const p = (recebe / venda) * 100;
+  return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
 }
 
 export function PecasScreen() {
@@ -217,7 +224,7 @@ export function PecasScreen() {
               <View style={styles.valores}>
                 <Text style={styles.venda}>{brl(item.venda)}</Text>
                 {item.consignado ? (
-                  <Text style={styles.recebe}>recebe {brl(recebeConsig(item.venda, item.consig_pct))} ({item.consig_pct || 0}%)</Text>
+                  <Text style={styles.recebe}>recebe {brl(recebeConsig(item))} {item.consig_tipo === 'valor' ? `(fixo · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}</Text>
                 ) : (
                   <Text style={styles.compra}>compra {brl(item.compra)}</Text>
                 )}
@@ -253,7 +260,7 @@ export function PecasScreen() {
           ...(dropDaPeca(menu.peca.drop_id, menu.peca.postado_em)
             ? [{ label: 'Ver no drop', icon: 'albums-outline' as const, onPress: () => irPraDrop(menu.peca.drop_id, menu.peca.postado_em) }]
             : []),
-          { label: 'Editar', icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setEditar({ peca: p }); } },
+          { label: 'Editar', icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setTimeout(() => setEditar({ peca: p }), 180); } },
           { label: 'Excluir', icon: 'trash-outline', cor: colors.erro, onPress: () => excluirPeca(menu.peca) },
         ] : []}
       />
