@@ -20,9 +20,16 @@ const num = (t: string) => {
   return isNaN(n) ? 0 : n;
 };
 
-// quanto eu recebo de uma peça consignada (só a %)
-function recebeConsig(venda: number, pct: number | null): number {
-  return venda * ((pct || 0) / 100);
+// quanto eu recebo de uma peça consignada — % da venda ou um valor fixo (nunca mais que a venda)
+function recebeConsig(venda: number, tipo: 'pct' | 'valor', pct: number, valor: number): number {
+  if (tipo === 'valor') return Math.min(valor, venda);
+  return venda * (pct / 100);
+}
+// % equivalente do que recebo sobre a venda (pra mostrar a % quando é valor fixo)
+function pctStr(recebe: number, venda: number): string {
+  if (venda <= 0) return '0%';
+  const p = (recebe / venda) * 100;
+  return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
 }
 
 // clipboard nativo (expo-clipboard). Cai pro Share se o nativo ainda não estiver no build.
@@ -52,13 +59,15 @@ function serializeMedidas(ms: Medida[]): string {
 type Form = {
   id: number | null; nome: string; item: string; tamanho: string; largura: string; comprimento: string;
   medidas: Medida[]; observacao: string; condicao: string; compra: string; venda: string; vendida: boolean;
-  consignado: boolean; consigPct: string; soManual: boolean;
+  consignado: boolean; consigTipo: 'pct' | 'valor'; consigPct: string; consigValor: string; soManual: boolean;
+  template: string;
   drop_id: number | null; imagem_url: string | null; fotoLocal: string | null; origem: string; code: string | null;
   postado_em: string | null;
 };
 const FORM_VAZIO: Form = {
   id: null, nome: '', item: '', tamanho: '', largura: '', comprimento: '', medidas: [], observacao: '',
-  condicao: '', compra: '', venda: '', vendida: false, consignado: false, consigPct: '', soManual: false,
+  condicao: '', compra: '', venda: '', vendida: false, consignado: false, consigTipo: 'pct', consigPct: '',
+  consigValor: '', soManual: false, template: '',
   drop_id: null, imagem_url: null, fotoLocal: null, origem: 'manual', code: null, postado_em: null,
 };
 function paraForm(p: Peca): Form {
@@ -67,8 +76,12 @@ function paraForm(p: Peca): Form {
     largura: p.largura ?? '', comprimento: p.comprimento ?? '',
     medidas: parseMedidas(p.medida), observacao: p.observacao ?? '',
     condicao: p.condicao ?? '', compra: p.compra ? String(p.compra) : '', venda: p.venda ? String(p.venda) : '',
-    vendida: p.vendida, consignado: p.consignado, consigPct: p.consig_pct != null ? String(p.consig_pct) : '',
-    soManual: p.so_manual, drop_id: p.drop_id, imagem_url: p.imagem_url, fotoLocal: null,
+    vendida: p.vendida, consignado: p.consignado,
+    consigTipo: p.consig_tipo === 'valor' ? 'valor' : 'pct',
+    consigPct: p.consig_pct != null ? String(p.consig_pct) : '',
+    consigValor: p.consig_valor != null ? String(p.consig_valor) : '',
+    soManual: p.so_manual, template: p.template ?? '',
+    drop_id: p.drop_id, imagem_url: p.imagem_url, fotoLocal: null,
     origem: p.origem ?? 'manual', code: p.code, postado_em: p.postado_em,
   };
 }
@@ -81,7 +94,11 @@ function gerarTemplate(f: Form): string {
   if (f.largura.trim()) partes.push(`l ${f.largura.trim()}cm`);
   if (f.comprimento.trim()) partes.push(`c ${f.comprimento.trim()}cm`);
   f.medidas.filter((m) => String(m.valor).trim())
-    .forEach((m) => partes.push(`${ABREV[m.tipo] ?? m.tipo.toLowerCase()} ${String(m.valor).trim()}cm`));
+    .forEach((m) => {
+      const nome = (ABREV[m.tipo] ?? (m.tipo || '').toLowerCase()).trim();
+      const val = String(m.valor).trim();
+      partes.push(nome ? `${nome} ${val}cm` : `${val}cm`);
+    });
   const medStr = partes.join(' ');
   const tam = f.tamanho.trim();
   if (tam && medStr) L.push(`tam.: ${tam} (${medStr})`);
@@ -166,8 +183,10 @@ export function EditorPeca({
       medida: serializeMedidas(form.medidas), observacao: form.observacao.trim(),
       condicao: form.condicao.trim(), compra: num(form.compra), venda: num(form.venda),
       vendida: form.vendida, drop_id: form.drop_id,
-      consignado: form.consignado, consig_pct: form.consignado ? num(form.consigPct) : null,
-      so_manual: form.soManual,
+      consignado: form.consignado, consig_tipo: form.consigTipo,
+      consig_pct: form.consignado && form.consigTipo === 'pct' ? num(form.consigPct) : null,
+      consig_valor: form.consignado && form.consigTipo === 'valor' ? num(form.consigValor) : null,
+      so_manual: form.soManual, template: form.template.trim() || null,
     };
     setSalvando(true);
     try {
@@ -283,6 +302,7 @@ export function EditorPeca({
             <View style={{ gap: 10 }}>
               {form.medidas.map((m, i) => (
                 <View key={i} style={styles.medidaRow}>
+                  {/* sugestões rápidas — clica pra preencher o nome (ou digita o seu no campo) */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
                     {TIPOS_MEDIDA.map((t) => (
                       <TouchableOpacity key={t}
@@ -293,8 +313,11 @@ export function EditorPeca({
                     ))}
                   </ScrollView>
                   <View style={styles.medidaValorRow}>
-                    <TextInput value={m.valor} keyboardType="numeric" placeholder="valor"
-                      placeholderTextColor={colors.textoFraco} style={styles.medidaInput}
+                    <TextInput value={m.tipo} placeholder="nome da medida" placeholderTextColor={colors.textoFraco}
+                      style={[styles.medidaInput, { flex: 1 }]}
+                      onChangeText={(v) => { const ms = [...form.medidas]; ms[i] = { ...ms[i], tipo: v }; setForm({ ...form, medidas: ms }); }} />
+                    <TextInput value={m.valor} keyboardType="numeric" placeholder="cm"
+                      placeholderTextColor={colors.textoFraco} style={[styles.medidaInput, { flex: 0, width: 60, textAlign: 'center' }]}
                       onChangeText={(v) => { const ms = [...form.medidas]; ms[i] = { ...ms[i], valor: v.replace(/[^\d.,]/g, '') }; setForm({ ...form, medidas: ms }); }} />
                     <Text style={styles.cmTxt}>cm</Text>
                     <TouchableOpacity hitSlop={8}
@@ -305,7 +328,7 @@ export function EditorPeca({
                 </View>
               ))}
               <TouchableOpacity style={styles.addMedida}
-                onPress={() => setForm({ ...form, medidas: [...form.medidas, { tipo: 'Circunferência', valor: '' }] })}>
+                onPress={() => setForm({ ...form, medidas: [...form.medidas, { tipo: '', valor: '' }] })}>
                 <Ionicons name="add" size={16} color={colors.marca} />
                 <Text style={styles.addMedidaTxt}>Adicionar medida</Text>
               </TouchableOpacity>
@@ -375,16 +398,47 @@ export function EditorPeca({
           </View>
           {form.consignado && (
             <View style={styles.consigRow}>
-              <Text style={styles.campoLabel}>% que fica pra mim</Text>
-              <View style={styles.consigInputWrap}>
-                <TextInput value={form.consigPct} keyboardType="numeric" maxLength={3}
-                  placeholder="40" placeholderTextColor={colors.textoFraco} style={[styles.input, { flex: 1 }]}
-                  onChangeText={(v) => setForm({ ...form, consigPct: v.replace(/[^\d]/g, '').slice(0, 3) })} />
-                <Text style={styles.condSufixo}>%</Text>
+              {/* toggle: % da venda OU valor fixo em R$ (um campo só) */}
+              <View style={styles.consigModo}>
+                {(['pct', 'valor'] as const).map((t) => (
+                  <TouchableOpacity key={t} onPress={() => setForm({ ...form, consigTipo: t })}
+                    style={[styles.modoChip, form.consigTipo === t && styles.modoChipOn]}>
+                    <Text style={[styles.modoChipTxt, form.consigTipo === t && styles.modoChipTxtOn]}>
+                      {t === 'pct' ? '% da venda' : 'Valor fixo (R$)'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <Text style={styles.consigPreview}>
-                você recebe {brl(recebeConsig(num(form.venda), num(form.consigPct)))} da venda de {brl(num(form.venda))}
-              </Text>
+              {form.consigTipo === 'pct' ? (
+                <>
+                  <Text style={styles.campoLabel}>% que fica pra mim</Text>
+                  <View style={styles.consigInputWrap}>
+                    <TextInput value={form.consigPct} keyboardType="numeric" maxLength={3}
+                      placeholder="40" placeholderTextColor={colors.textoFraco} style={[styles.input, { flex: 1 }]}
+                      onChangeText={(v) => setForm({ ...form, consigPct: v.replace(/[^\d]/g, '').slice(0, 3) })} />
+                    <Text style={styles.condSufixo}>%</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.campoLabel}>R$ que fica pra mim (fixo por venda)</Text>
+                  <View style={styles.consigInputWrap}>
+                    <Text style={styles.condSufixo}>R$</Text>
+                    <TextInput value={form.consigValor} keyboardType="numeric"
+                      placeholder="5" placeholderTextColor={colors.textoFraco} style={[styles.input, { flex: 1 }]}
+                      onChangeText={(v) => setForm({ ...form, consigValor: v.replace(/[^\d.,]/g, '') })} />
+                  </View>
+                </>
+              )}
+              {(() => {
+                const venda = num(form.venda);
+                const recebe = recebeConsig(venda, form.consigTipo, num(form.consigPct), num(form.consigValor));
+                return (
+                  <Text style={styles.consigPreview}>
+                    você recebe {brl(recebe)}{form.consigTipo === 'valor' ? ` (${pctStr(recebe, venda)})` : ''} da venda de {brl(venda)}
+                  </Text>
+                );
+              })()}
             </View>
           )}
 
@@ -397,14 +451,37 @@ export function EditorPeca({
               trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
           </View>
 
-          {/* template pra copiar/colar na hora de postar */}
-          <View style={styles.templateBox}>
-            <View style={styles.templateTopo}>
-              <Text style={styles.campoLabel}>Template do post</Text>
-              <BotaoCopiar texto={gerarTemplate(form)} />
-            </View>
-            <Text selectable style={styles.templateTxt}>{gerarTemplate(form)}</Text>
-          </View>
+          {/* template pra copiar/colar na hora de postar — editável nas peças manuais */}
+          {(() => {
+            const gerado = gerarTemplate(form);
+            const manual = form.soManual;   // só edita quando o toggle "Manual" está ligado
+            const custom = form.template.trim() !== '';
+            return (
+              <View style={styles.templateBox}>
+                <View style={styles.templateTopo}>
+                  <Text style={styles.campoLabel}>Template do post{manual ? ' (editável)' : ''}</Text>
+                  <BotaoCopiar texto={manual && custom ? form.template : gerado} />
+                </View>
+                {manual ? (
+                  <>
+                    <TextInput
+                      value={custom ? form.template : gerado}
+                      onChangeText={(v) => setForm({ ...form, template: v })}
+                      multiline textAlignVertical="top"
+                      placeholder="legenda do post…" placeholderTextColor={colors.textoFraco}
+                      style={styles.templateInput} />
+                    {custom && (
+                      <TouchableOpacity onPress={() => setForm({ ...form, template: '' })} hitSlop={6}>
+                        <Text style={styles.templateReset}>voltar ao automático</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <Text selectable style={styles.templateTxt}>{gerado}</Text>
+                )}
+              </View>
+            );
+          })()}
 
           {form.code && (
             <Botao title="Abrir no Instagram" cor={colors.card2} txtCor={colors.marca}
@@ -492,6 +569,11 @@ const styles = StyleSheet.create({
   boolLabel: { color: colors.texto, fontSize: 15, fontWeight: '600' },
   boolSub: { color: colors.textoFraco, fontSize: 11, marginTop: 2, lineHeight: 15 },
   consigRow: { gap: 6 },
+  consigModo: { flexDirection: 'row', gap: 8, marginBottom: 2 },
+  modoChip: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingVertical: 8 },
+  modoChipOn: { backgroundColor: colors.marca, borderColor: colors.marca },
+  modoChipTxt: { color: colors.texto, fontSize: 13 },
+  modoChipTxtOn: { color: '#FFFFFF', fontWeight: '700' },
   consigInputWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   consigPreview: { color: colors.textoFraco, fontSize: 12, lineHeight: 16 },
   templateBox: { backgroundColor: colors.card2, borderRadius: 10, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 },
@@ -499,6 +581,8 @@ const styles = StyleSheet.create({
   copiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.marca },
   copiarTxt: { color: colors.marca, fontSize: 12, fontWeight: '700' },
   templateTxt: { color: colors.texto, fontSize: 13, lineHeight: 20, fontFamily: 'monospace' },
+  templateInput: { color: colors.texto, fontSize: 13, lineHeight: 20, fontFamily: 'monospace', backgroundColor: colors.bg, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 10, minHeight: 160 },
+  templateReset: { color: colors.marca, fontSize: 12, fontWeight: '700', marginTop: 8, textAlign: 'right' },
   tipoChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   tipoChipOn: { backgroundColor: colors.marca, borderColor: colors.marca },
   tipoChipTxt: { color: colors.texto, fontSize: 12 },

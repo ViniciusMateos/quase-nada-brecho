@@ -17,7 +17,10 @@ export type Peca = {
   vendida: boolean;
   consignado: boolean;
   consig_pct: number | null;
+  consig_tipo: 'pct' | 'valor';
+  consig_valor: number | null;
   so_manual: boolean;
+  template: string | null;
   imagem_url: string | null;
   drop_id: number | null;
   drop_nome: string | null;
@@ -27,7 +30,7 @@ export type Peca = {
   postado_em: string | null;
 };
 export type PecaCampos = Partial<Pick<Peca,
-  'nome' | 'item' | 'tamanho' | 'largura' | 'comprimento' | 'medida' | 'observacao' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id' | 'consignado' | 'consig_pct' | 'so_manual'>>;
+  'nome' | 'item' | 'tamanho' | 'largura' | 'comprimento' | 'medida' | 'observacao' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id' | 'consignado' | 'consig_pct' | 'consig_tipo' | 'consig_valor' | 'so_manual' | 'template'>>;
 
 export type Drop = {
   id: number;

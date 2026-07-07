@@ -54,9 +54,12 @@ _MIGRACOES = [
     ("pecas", "comprimento", "TEXT"),  # medida padrão: comprimento (c XXcm na legenda)
     ("pecas", "medida", "TEXT"),   # medidas especiais (JSON: circunferência do boné, palmilha do tênis)
     ("pecas", "observacao", "TEXT"),  # observação livre sobre a peça (vai no template do post)
-    ("pecas", "consignado", "INTEGER NOT NULL DEFAULT 0"),  # peça de terceiro (só recebo uma %)
-    ("pecas", "consig_pct", "REAL"),  # % do valor da venda que fica pra mim (ex: 40)
+    ("pecas", "consignado", "INTEGER NOT NULL DEFAULT 0"),  # peça de terceiro (só recebo uma parte)
+    ("pecas", "consig_pct", "REAL"),  # % do valor da venda que fica pra mim (ex: 40) — modo 'pct'
+    ("pecas", "consig_tipo", "TEXT NOT NULL DEFAULT 'pct'"),  # 'pct' (%) ou 'valor' (R$ fixo)
+    ("pecas", "consig_valor", "REAL"),  # R$ fixo que fica pra mim por venda — modo 'valor'
     ("pecas", "so_manual", "INTEGER NOT NULL DEFAULT 0"),  # peça travada: o scraper NÃO atualiza
+    ("pecas", "template", "TEXT"),  # legenda do post customizada à mão (senão gera automático no app)
 ]
 
 
