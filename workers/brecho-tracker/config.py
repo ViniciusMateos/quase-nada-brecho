@@ -61,17 +61,20 @@ SCROLL_MAX = 120                 # teto de scrolls (segurança; para antes no "e
 SCROLL_ESTAVEL_MAX = 6           # nº de scrolls seguidos sem post novo p/ declarar fim
 SCROLL_PAUSA_MS = (1800, 3800)   # pausa humana entre scrolls (ms)
 
-# ── Legado (chamada /feed/user direta — estrangula; mantido só por referência) ──
+# Backoff quando o IG estrangula uma LEITURA (usado no iglib._get, que serve o
+# perfil_info): quanto esperar, em segundos, antes de tentar a mesma chamada de novo.
+RATE_LIMIT_ESPERAS = (120.0, 240.0, 300.0)
+
+# ── Legado (chamada /feed/user direta — estrangula; NÃO usado na raspagem por scroll) ──
 POSTS_POR_PAGINA = 12
 MAX_PAGINAS = 60
 DELAY_PAGINA = (15.0, 30.0)
-RATE_LIMIT_ESPERAS = (120.0, 240.0, 300.0)
 
-# ── Boundary (retomada) ──
-# Drops ANTERIORES a esta data já estão 100% vendidos → não precisa raspar de novo.
-# É salvo/atualizado no state.json automaticamente: vira a data do drop mais antigo
-# que AINDA tem peça disponível. Na 1ª run fica vazio (raspa tudo).
-# Para forçar, edite o state.json (campo "boundary_drop").
+# ── Boundary ──
+# Drops ANTERIORES a esta data já estão 100% vendidos → descartados pós-raspagem.
+# Recalculado a cada run a partir da planilha (planilha.boundary_disponivel): a data
+# do drop mais antigo que ainda tem peça disponível. Na 1ª run / com --full, raspa
+# tudo. Não há persistência em arquivo.
 
 # ─────────────────────────── Planilha ──────────────────────
 PLANILHA = os.path.join(_BASE, "quasenadabrecho.xlsx")   # base atual (referência)
@@ -88,6 +91,4 @@ THUMB_W = 110                 # lado máximo da miniatura embutida na planilha (
 # ─────────────────────────── Paths ──────────────────────────
 OUTPUT_DIR = os.path.join(_BASE, "output")
 IMAGENS_DIR = os.path.join(OUTPUT_DIR, "imagens")   # cache de miniaturas (regenerável)
-STATE_FILE = os.path.join(OUTPUT_DIR, "state.json")
-RESUME_FILE = os.path.join(OUTPUT_DIR, "resume.json")  # progresso da paginação (retoma se travar)
 LOG_FILE = os.path.join(OUTPUT_DIR, "run.log")

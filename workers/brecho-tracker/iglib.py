@@ -166,10 +166,10 @@ class IG:
     def _get(self, url, tentativas=4):
         """GET same-origin pela página logada. Retorna dict JSON ou levanta.
 
-        O IG às vezes estrangula (rate-limit) requisições vindas de IP de
-        datacenter — o fetch da página rejeita com 'Failed to fetch' ou devolve
-        429. Em vez de abortar a raspagem inteira, espera um pouco (backoff
-        crescente) e tenta de novo algumas vezes."""
+        Hoje só serve o perfil_info (a raspagem vai por raspar_perfil_scroll). O IG
+        às vezes estrangula (rate-limit) requisições vindas de IP de datacenter — o
+        fetch da página rejeita com 'Failed to fetch' ou devolve 429. Em vez de
+        abortar a leitura, espera um pouco (backoff crescente) e tenta de novo."""
         ultimo = None
         for i in range(tentativas):
             transitorio = True                                 # 'Failed to fetch'/rede = transitório
