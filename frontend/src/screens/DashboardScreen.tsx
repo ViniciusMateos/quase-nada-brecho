@@ -1,12 +1,17 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api, Dashboard } from '@/lib/api';
+import { Ionicons } from '@expo/vector-icons';
+import { api, Dashboard, DropResumo } from '@/lib/api';
 import { colors } from '@/theme';
 import { Aparece, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
+import type { RootStackParamList } from '@/navigation/RootNavigator';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
@@ -22,14 +27,28 @@ function rotuloDrop(s: string) {
 
 export function DashboardScreen() {
   const [dash, setDash] = useState<Dashboard | null>(null);
+  const [dropsInfo, setDropsInfo] = useState<DropResumo[]>([]);
+  const nav = useNavigation<Nav>();
 
   const insets = useSafeAreaInsets();
   const carregar = useCallback(() => {
-    return api.getDashboard().then(setDash)
-      .catch(() => setDash({ existe: false, kpis: null, por_drop: [], por_categoria: [] }));
+    return Promise.all([
+      api.getDashboard().then(setDash)
+        .catch(() => setDash({ existe: false, kpis: null, por_drop: [], por_categoria: [] })),
+      api.listDropsTodos().then((r) => setDropsInfo(r.drops)).catch(() => {}),
+    ]);
   }, []);
   useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
   const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
+
+  // abre o drop da linha (resolve pelo número: manual -> DropDetail, histórico -> HistoricoDrop)
+  function irPraDrop(numero: number | null) {
+    if (numero == null) return;
+    const d = dropsInfo.find((x) => x.numero === numero);
+    if (!d) return;
+    if (d.tipo === 'manual' && d.id != null) nav.navigate('DropDetail', { dropId: d.id, nome: `Drop ${d.numero}` });
+    else nav.navigate('HistoricoDrop', { data: d.data, titulo: `Drop ${d.numero}` });
+  }
 
   if (!dash) return <TelaCarregando />;
   if (!dash.existe || !dash.kpis) {
@@ -102,7 +121,8 @@ export function DashboardScreen() {
               <TabelaLinha key={d.drop}
                 nome={d.numero != null ? `Drop ${d.numero}` : rotuloDrop(d.drop)}
                 sub={d.numero != null ? rotuloDrop(d.drop) : undefined}
-                vendidas={d.vendidas} total={d.total} faturamento={d.faturamento} lucro={d.lucro} />
+                vendidas={d.vendidas} total={d.total} faturamento={d.faturamento} lucro={d.lucro}
+                onPress={d.numero != null ? () => irPraDrop(d.numero) : undefined} />
             ))}
           </Card>
         </Aparece>
@@ -144,10 +164,10 @@ function TabelaHead({ col1 = 'item' }: { col1?: string }) {
   );
 }
 
-function TabelaLinha({ nome, sub, vendidas, total, faturamento, lucro }:
-  { nome: string; sub?: string; vendidas: number; total: number; faturamento: number; lucro: number }) {
-  return (
-    <View style={styles.tabLinha}>
+function TabelaLinha({ nome, sub, vendidas, total, faturamento, lucro, onPress }:
+  { nome: string; sub?: string; vendidas: number; total: number; faturamento: number; lucro: number; onPress?: () => void }) {
+  const conteudo = (
+    <>
       <View style={styles.tabNome}>
         <Text style={styles.tabNomeTxt} numberOfLines={1}>{nome}</Text>
         {sub ? <Text style={styles.tabSub} numberOfLines={1}>{sub}</Text> : null}
@@ -155,8 +175,13 @@ function TabelaLinha({ nome, sub, vendidas, total, faturamento, lucro }:
       <Text style={styles.tabCol}>{vendidas}/{total}</Text>
       <Text style={[styles.tabCol, { flex: 1.3 }]}>{brl(faturamento)}</Text>
       <Text style={[styles.tabCol, styles.tabLucro, { flex: 1.3 }]}>{brl(lucro)}</Text>
-    </View>
+      {onPress ? <Ionicons name="chevron-forward" size={14} color={colors.textoFraco} style={{ marginLeft: 4 }} /> : null}
+    </>
   );
+  if (onPress) {
+    return <TouchableOpacity style={styles.tabLinha} activeOpacity={0.6} onPress={onPress}>{conteudo}</TouchableOpacity>;
+  }
+  return <View style={styles.tabLinha}>{conteudo}</View>;
 }
 
 const styles = StyleSheet.create({
