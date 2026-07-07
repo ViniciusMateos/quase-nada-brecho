@@ -3,23 +3,27 @@ brecho-tracker — raspa o brechó @brechoquasenadaa e mantém a planilha dinâm
 
 Fluxo:
   1. abre a sessão logada (cookies importados 1x)
-  2. raspa a timeline do MAIS NOVO pro mais antigo
-  3. para no BOUNDARY: o drop mais antigo que ainda tem peça disponível na planilha
-     (drops mais antigos já estão 100% vendidos → não precisa revisitar)
-  4. parseia cada post (ignora divulgação), reconcilia com a planilha (preserva o
-     manual, atualiza o raspado, retém preço) e recalcula os KPIs
+  2. raspa o feed inteiro DESCENDO o perfil (scroll) e interceptando as respostas
+     graphql que a própria página dispara — sem chamar a API em rajada, então não
+     toma rate-limit (ver iglib.raspar_perfil_scroll)
+  3. parseia cada post (ignora divulgação); o boundary só DESCARTA as peças
+     anteriores ao drop mais antigo ainda disponível (já 100% vendidas) — não
+     interrompe a raspagem
+  4. reconcilia com a planilha (preserva o manual, atualiza o raspado, retém preço)
+     e recalcula os KPIs
   5. salva brecho_tracker.xlsx
 
 Uso:
   python main.py --import-cookies "C:\\...\\cookies.json"   # 1x, loga
   python main.py --dry-run        # raspa e mostra o que MUDARIA, sem gravar a planilha
   python main.py                  # roda pra valer (atualiza a planilha)
-  python main.py --full           # ignora o boundary e raspa o feed inteiro
+  python main.py --full           # ignora o boundary e mantém o feed inteiro
 """
 import argparse
 import io
 import os
 import sys
+import time
 
 import config
 from iglib import IG, carregar_cookies, log
@@ -27,6 +31,16 @@ import parser
 import planilha
 
 COOKIES_FILE = "imported_cookies.json"
+
+_T_INICIO = time.monotonic()
+
+
+def _dur_run():
+    """Tempo total desta execução, formatado (ex: '3m 12s')."""
+    s = int(time.monotonic() - _T_INICIO)
+    h, r = divmod(s, 3600)
+    m, s = divmod(r, 60)
+    return f"{h}h {m}m {s}s" if h else (f"{m}m {s}s" if m else f"{s}s")
 
 
 def _reinjetar_sessao(ig):
@@ -133,6 +147,7 @@ def resumo_dry(pecas, db, antiga):
     log.info("   lucro líquido (vendas)  R$ %.2f", k["lucro líquido"])
     log.info("   peças: %d | vendidas: %d | disponíveis: %d",
              k["peças"], k["vendidas"], k["disponíveis"])
+    log.info("   tempo de execução ..... %s", _dur_run())
     log.info("─────────────────────────────────────────────────")
 
 
@@ -181,6 +196,7 @@ def run(dry=False, full=False):
              k["gastos totais"], k["custo das vendidas"], k["lucro líquido"])
     log.info("   peças: %d | vendidas: %d | disponíveis: %d",
              k["peças"], k["vendidas"], k["disponíveis"])
+    log.info("   tempo de execução ..... %s", _dur_run())
     nb = planilha.boundary_disponivel(db)
     log.info("   próximo boundary (drop mais antigo disponível): %s", nb or "(nenhum)")
 
