@@ -90,10 +90,15 @@ export type Progresso = { done: number; total: number; label: string };
 export type RunInfo = {
   id: string; status: string; started_at: number; ended_at?: number | null;
   returncode?: number | null; params: Record<string, unknown>; linhas: number;
-  progress?: Progresso | null;
+  progress?: Progresso | null; titulo?: string;
 };
 export type RunDetail = RunInfo & { log: string[] };
 export type ImportStats = { novas: number; atualizadas: number; total: number };
+export type RunHistorico = {
+  id: string; bot: string; dry_run: boolean;
+  started_at: number | null; ended_at: number | null; duracao_s: number | null;
+  status: string; bloqueio: boolean; saldo: Record<string, number | string>; backfill?: boolean;
+};
 export type IgCookie = {
   name: string; value: string; domain?: string; path?: string;
   httpOnly?: boolean; secure?: boolean; sameSite?: string; session?: boolean; expirationDate?: number;
@@ -125,8 +130,10 @@ export const api = {
   // scraper / runs
   startRun: (params: Record<string, unknown>) => http.post<RunInfo>('/runs', params),
   listRuns: () => http.get<RunInfo[]>('/runs'),
+  getRunsHistorico: () => http.get<RunHistorico[]>('/runs/history'),
   getRun: (id: string) => http.get<RunDetail>(`/runs/${id}`),
   stopRun: (id: string) => http.post(`/runs/${id}/stop`),
+  setLiveActivity: (runId: string, token: string) => http.post(`/runs/${runId}/liveactivity`, { token }),
   importarPlanilha: () => http.post<ImportStats>('/scraper/importar'),
   connectInstagram: (cookies: IgCookie[]) => http.post<ConnectResult>('/instagram/session', { cookies }),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),

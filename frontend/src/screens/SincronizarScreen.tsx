@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, RunInfo } from '@/lib/api';
 import { colors, statusCor } from '@/theme';
 import { Aparece, Botao, Card, Pill, Pulsar } from '@/ui/components';
+import { iniciarLAparaRun } from '@/lib/la';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -26,6 +27,7 @@ export function SincronizarScreen() {
     setIniciando(true);
     try {
       const run = await api.startRun(params);
+      await iniciarLAparaRun(run.id, 'Raspando o brechó');
       nav.navigate('Run', { runId: run.id, nome });
     } catch {
       Alert.alert('Ops', 'Não consegui iniciar. Confira o servidor/token em Configurações e se o Instagram está conectado.');
@@ -47,7 +49,13 @@ export function SincronizarScreen() {
           </Text>
           <Botao title="Atualizar agora" onPress={() => rodar({}, 'Raspagem do brechó')} loading={iniciando} />
           <Botao title="Prévia (não grava)" cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ dry_run: true }, 'Prévia da raspagem')} />
+            onPress={() => rodar({ dry_run: true }, 'Prévia da raspagem')} disabled={iniciando} />
+          <Botao title="Raspagem completa" cor={colors.card2} txtCor={colors.texto}
+            onPress={() => rodar({ full: true }, 'Raspagem completa')} disabled={iniciando} />
+          <Text style={styles.hint}>
+            Completa = re-lê o feed inteiro e recaptura as fotos. Use quando alguma foto sumir
+            (os links do Insta expiram) ou pra forçar uma atualização geral do brechó.
+          </Text>
         </Card>
       </Aparece>
 
@@ -104,6 +112,7 @@ const styles = StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   titulo: { color: colors.texto, fontSize: 17, fontWeight: '800' },
   desc: { color: colors.textoFraco, fontSize: 13, lineHeight: 19 },
+  hint: { color: colors.textoFraco, fontSize: 11, lineHeight: 16, marginTop: 2 },
   secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase' },
   runItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   runTxt: { color: colors.laranja, fontSize: 14, fontWeight: '600' },

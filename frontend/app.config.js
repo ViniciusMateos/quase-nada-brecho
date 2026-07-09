@@ -46,10 +46,12 @@ module.exports = {
     ios: {
       bundleIdentifier: current.bundleId,
       supportsTablet: false,
+      appleTeamId: '4F7QHTY86S',   // exigido pelo @bacons/apple-targets (assinatura do widget)
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSPhotoLibraryUsageDescription: 'Usado para anexar fotos das peças do brechó.',
         NSCameraUsageDescription: 'Usado para tirar fotos das peças do brechó.',
+        NSSupportsLiveActivities: true,   // Live Activity da raspagem (barra viva)
         // dev fala com o backend local por http → libera cleartext só no dev
         ...(isDev ? { NSAppTransportSecurity: { NSAllowsArbitraryLoads: true, NSAllowsLocalNetworking: true } } : {}),
       },
@@ -59,7 +61,7 @@ module.exports = {
       usesCleartextTraffic: isDev,
       adaptiveIcon: { foregroundImage: current.icon, backgroundColor: '#FF8234' },
     },
-    plugins: ['expo-secure-store', 'expo-notifications', 'expo-font', 'expo-asset', 'expo-image-picker'],
+    plugins: ['expo-secure-store', 'expo-notifications', 'expo-font', 'expo-asset', 'expo-image-picker', '@bacons/apple-targets'],
     extra,
   },
 };

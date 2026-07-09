@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api, IgCookie } from '@/lib/api';
+import { iniciarLAparaRun } from '@/lib/la';
 import { colors } from '@/theme';
 import { Botao } from '@/ui/components';
 import { LoadingDog } from '@/ui/LoadingDog';
@@ -70,6 +71,8 @@ export function InstagramLoginScreen() {
       jaCapturou.current = true;
       const res = await api.connectInstagram(cookies);
       if (!res.runs?.length) throw new Error('sem runs');
+      // mesma barra viva / notificações do scraper, só que "Conectando Instagram"
+      await iniciarLAparaRun(res.runs[0].id, 'Conectando Instagram');
       nav.replace('Run', { runId: res.runs[0].id, nome: 'Conectar Instagram' });
     } catch {
       jaCapturou.current = false;

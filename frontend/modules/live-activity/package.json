@@ -1,0 +1,6 @@
+{
+  "name": "live-activity",
+  "version": "1.0.0",
+  "description": "Controle da Live Activity do scraper (ActivityKit)",
+  "main": "index.ts"
+}
