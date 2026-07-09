@@ -244,7 +244,7 @@ class IG:
         itens = data.get("items", []) or []
         return itens, data.get("next_max_id"), bool(data.get("more_available"))
 
-    def raspar_perfil_scroll(self, username, max_scrolls=None, estavel_max=None):
+    def raspar_perfil_scroll(self, username, max_scrolls=None, estavel_max=None, total_alvo=None):
         """Raspa o feed do perfil SCROLLANDO como humano e interceptando as respostas
         XHR (graphql) que a PRÓPRIA página dispara conforme carrega os posts.
 
@@ -293,6 +293,9 @@ class IG:
                 n = len(capturados)
                 if n > ult:                        # só loga quando chegou lote novo
                     log.info("+%d posts (total: %d)", n - ult, n)
+                    # marker de progresso pro backend/app (linha PURA, sem prefixo de log)
+                    if total_alvo:
+                        print(f"[progress] {min(n, total_alvo)} {total_alvo} descendo o feed", flush=True)
                     estavel = 0
                 else:
                     estavel += 1                   # scroll sem novidade (carregando/fim)

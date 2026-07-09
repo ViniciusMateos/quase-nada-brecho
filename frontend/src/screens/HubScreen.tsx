@@ -89,6 +89,10 @@ export function HubScreen() {
         <MenuCard icone="sync" titulo="Sincronizar brechó" sub="raspa o Instagram e atualiza as vendas"
           onPress={() => nav.navigate('Sincronizar')} />
       </Aparece>
+      <Aparece delay={200}>
+        <MenuCard icone="time" titulo="Histórico" sub="raspagens anteriores: saldo, data e resultado"
+          onPress={() => nav.navigate('Historico')} />
+      </Aparece>
       </ScrollView>
     </View>
   );

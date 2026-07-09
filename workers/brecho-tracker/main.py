@@ -109,7 +109,7 @@ def raspar(ig, boundary):
     else:
         log.info("Sem boundary (--full): raspando o feed inteiro.")
 
-    itens = ig.raspar_perfil_scroll(config.BRECHO_USERNAME)
+    itens = ig.raspar_perfil_scroll(config.BRECHO_USERNAME, total_alvo=info.get("posts"))
     itens.sort(key=lambda x: x.get("taken_at") or 0, reverse=True)   # novo→antigo
 
     pecas, promo, cortadas = [], 0, 0
@@ -197,6 +197,9 @@ def run(dry=False, full=False):
     log.info("   peças: %d | vendidas: %d | disponíveis: %d",
              k["peças"], k["vendidas"], k["disponíveis"])
     log.info("   tempo de execução ..... %s", _dur_run())
+    # marcador machine-readable pro histórico (vai pro stdout E pro run.log)
+    log.info("[saldo] novas=%d atualizadas=%d recem_vendidas=%d total=%d disponiveis=%d",
+             stats["novas"], stats["atualizadas"], stats["recem_vendidas"], k["peças"], k["disponíveis"])
     nb = planilha.boundary_disponivel(db)
     log.info("   próximo boundary (drop mais antigo disponível): %s", nb or "(nenhum)")
 
