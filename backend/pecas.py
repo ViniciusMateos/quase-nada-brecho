@@ -222,7 +222,16 @@ def upsert_scraper(items):
                 "largura": _med_str(it.get("largura")), "comprimento": _med_str(it.get("comprimento")),
                 "condicao": it.get("condicao"), "vendida": 1 if it.get("vendida") else 0,
                 "imagem_url": it.get("imagem_url"), "postado_em": it.get("drop") or it.get("postado_em"),
+                # a foto OFICIAL do post (imagem_url) manda: limpa o upload local não-oficial do
+                # planejamento pra ela aparecer. Não baixa nada — usa o link do Insta (que expira;
+                # quando sumir, roda "Raspagem completa" que recaptura os links).
+                "imagem": None,
             }
+            # preço do Insta manda quando a peça está DISPONÍVEL (o post traz R$). Peça vendida
+            # não traz preço na legenda → NÃO mexe na venda (preserva o valor pro faturamento).
+            v_insta = _num(it.get("venda"))
+            if v_insta > 0:
+                campos["venda"] = v_insta
             # só sobrescreve a medida especial quando o post traz circunferência
             # (senão não apaga uma palmilha preenchida na mão)
             mj = _medida_json_circ(it.get("circunferencia"))
