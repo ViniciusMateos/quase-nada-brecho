@@ -89,6 +89,12 @@ function paraForm(p: Peca): Form {
 // Gera o template da legenda pra copiar/colar no post (mesmo formato do brechó).
 function gerarTemplate(f: Form): string {
   const L: string[] = [];
+  // peça vendida (pelo scraper ou pelo toggle): marca no topo + linha em branco,
+  // e sem o preço (omitido mais abaixo) — mesmo formato do post vendido no Insta.
+  if (f.vendida) {
+    L.push('❌VENDIDA❌');
+    L.push('');
+  }
   L.push(`| ${f.nome.trim() || f.item.trim()}`.trimEnd());
   const partes: string[] = [];
   if (f.largura.trim()) partes.push(`l ${f.largura.trim()}cm`);
