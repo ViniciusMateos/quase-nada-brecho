@@ -2,3 +2,6 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 openpyxl==3.1.5
+# Live Activity (APNs): JWT ES256 + cliente HTTP/2 pro APNs
+pyjwt[crypto]==2.10.1
+httpx[http2]==0.28.1

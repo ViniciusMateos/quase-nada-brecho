@@ -3,3 +3,6 @@ __pycache__/
 .env
 .env.local
 data/
+
+# histórico das runs (gerado em runtime)
+runs_history.jsonl

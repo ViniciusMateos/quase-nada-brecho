@@ -18,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import drops
+import history
+import liveactivity
 import notify
 import pecas
 import scraper
@@ -163,6 +165,12 @@ async def list_runs():
     return mgr.listar()
 
 
+# precisa vir ANTES de /runs/{run_id} (senão "history" casa como run_id)
+@app.get("/runs/history", dependencies=[Depends(auth)])
+async def runs_history(status: str = None, desde: float = None, ate: float = None):
+    return history.listar(status=status, desde=desde, ate=ate)
+
+
 @app.get("/runs/{run_id}", dependencies=[Depends(auth)])
 async def run_detail(run_id: str):
     r = mgr.get(run_id)
@@ -176,6 +184,19 @@ async def stop_run(run_id: str):
     if not await mgr.stop(run_id):
         raise HTTPException(404, "run não encontrado")
     return {"stopped": True}
+
+
+@app.post("/runs/{run_id}/liveactivity", dependencies=[Depends(auth)])
+async def run_liveactivity(run_id: str, payload: dict):
+    """O app manda o push token da Live Activity que iniciou pra esta run — a partir
+    daí o server empurra os updates da barra viva via APNs."""
+    run = mgr.get(run_id)
+    if not run:
+        raise HTTPException(404, "run não encontrado")
+    run.la_token = (payload.get("token") or "").strip() or None
+    print(f"[la] token recebido p/ {run_id}: {'sim (' + str(len(run.la_token)) + ' chars)' if run.la_token else 'VAZIO'} "
+          f"| configurado={liveactivity.configurado()}", flush=True)
+    return {"ok": True}
 
 
 @app.websocket("/runs/{run_id}/logs")
