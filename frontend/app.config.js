@@ -36,8 +36,10 @@ module.exports = {
   expo: {
     name: current.name,
     slug: 'quase-nada-brecho',
-    version: '1.0.0',
-    runtimeVersion: { policy: 'appVersion' },
+    version: '1.0.1',
+    // fixo (não segue a versão): mantém o OTA compatível com os builds já instalados;
+    // só sobe quando uma mudança NATIVA quebra a compatibilidade com o bundle JS.
+    runtimeVersion: '1.0.0',
     updates: { url: 'https://u.expo.dev/a0c13d7d-b73a-42ad-8d28-e1907c6500c9' },
     orientation: 'portrait',
     scheme: current.scheme,

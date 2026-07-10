@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.1] — 2026-07-10
+
+### Adicionado
+- feat: OTA via expo-updates — mudanças de JS chegam ao app pela internet, sem build nem loja (só o nativo ainda exige build)
+
+### Corrigido
+- fix: splash preenche a tela com o fundo laranja da marca (logo no tamanho certo)
+- fix: widget do scraper desmonta ao parar a run (não fica mais preso na última %)
+- fix: Hub mostra o total de drops (manuais + publicados), não só os manuais
+
+### Notas
+- `runtimeVersion` fixado em `1.0.0` (desacoplado da versão de vitrine) pra manter o OTA compatível com os builds já instalados
+- Live Activity: `APNS_BUNDLE_ID` do servidor apontando pro bundle `.preview`
+
 ## [1.0.0] — 2026-07-10
 
 Primeira versão cheia do Quase Nada Brechó — o lançamento.
