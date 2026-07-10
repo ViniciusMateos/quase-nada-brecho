@@ -21,7 +21,9 @@ export function HubScreen() {
 
   const carregar = useCallback(async () => {
     try {
-      const [p, d] = await Promise.all([api.listPecas(), api.listDrops()]);
+      // total de drops = unificado (manuais + os publicados que vieram do Insta),
+      // igual a tela de Drops — não só a tabela manual
+      const [p, d] = await Promise.all([api.listPecas(), api.listDropsTodos()]);
       setPecas(p.pecas.length);
       // só peças do catálogo manual sem drop contam pro "gerar cronograma"
       setSemDrop(p.pecas.filter((x) => x.drop_id == null && x.origem === 'manual').length);
