@@ -21,6 +21,7 @@ export type Peca = {
   consig_valor: number | null;
   so_manual: boolean;
   template: string | null;
+  num: number | null;
   imagem_url: string | null;
   drop_id: number | null;
   drop_nome: string | null;
@@ -60,17 +61,6 @@ export type DropResumo = {
   lucro: number;
   sold_out: boolean;
 };
-
-export type GerarDropsReq = {
-  qtd_drops?: number;
-  por_drop?: number;
-  data_inicio?: string;
-  intervalo_dias?: number;
-  peca_ids?: number[] | null;
-  prefixo_nome?: string;
-  status?: string;
-};
-export type GerarDropsResp = { ok: boolean; erro?: string; drops: DropDetalhe[] };
 
 export type Kpis = {
   total: number; vendidas: number; disponiveis: number; taxa_venda: number;
@@ -125,7 +115,6 @@ export const api = {
   editDrop: (id: number, campos: DropCampos) => http.put<DropDetalhe>(`/drops/${id}`, campos),
   delDrop: (id: number) => http.del(`/drops/${id}`),
   setPecasDrop: (id: number, peca_ids: number[]) => http.put<DropDetalhe>(`/drops/${id}/pecas`, { peca_ids }),
-  gerarDrops: (req: GerarDropsReq) => http.post<GerarDropsResp>('/drops/gerar', req),
 
   // scraper / runs
   startRun: (params: Record<string, unknown>) => http.post<RunInfo>('/runs', params),

@@ -142,11 +142,6 @@ async def set_pecas_drop(drop_id: int, payload: dict):
     return drops.set_pecas(drop_id, payload.get("peca_ids", []))
 
 
-@app.post("/drops/gerar", dependencies=[Depends(auth)])
-async def gerar_drops(payload: dict):
-    return drops.gerar(payload)
-
-
 # ─────────────────────── scraper / runs ──────────────────────────
 @app.post("/scraper/importar", dependencies=[Depends(auth)])
 async def scraper_importar():

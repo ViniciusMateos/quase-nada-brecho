@@ -59,20 +59,6 @@ export function HubScreen() {
         </View>
       )}
 
-      {semDrop > 0 && (
-        <Aparece>
-          <TouchableOpacity onPress={() => nav.navigate('GerarDrops')}>
-            <View style={styles.cta}>
-              <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-              <Text style={styles.ctaTxt}>
-                {semDrop} peça{semDrop > 1 ? 's' : ''} sem drop — gerar cronograma
-              </Text>
-              <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-        </Aparece>
-      )}
-
       <Aparece delay={40}>
         <MenuCard icone="pricetags" titulo="Peças" sub={pecas == null ? 'carregando…' : `${pecas} cadastradas`}
           onPress={() => nav.navigate('Pecas')} />

@@ -81,18 +81,7 @@ export function DropsScreen() {
         keyExtractor={(d, i) => `${d.tipo}-${d.id ?? d.data ?? i}`}
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: insets.bottom + 96 }}
         {...scrollProps}
-        ListHeaderComponent={
-          <>
-            {spacerEl}
-            <TouchableOpacity onPress={() => nav.navigate('GerarDrops')} activeOpacity={0.9}>
-              <View style={styles.cta}>
-                <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-                <Text style={styles.ctaTxt}>Gerar drops automaticamente</Text>
-                <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
-          </>
-        }
+        ListHeaderComponent={spacerEl}
         ListEmptyComponent={
           <Text style={styles.vazio}>Nenhum drop ainda. Rode o Sincronizar pra puxar o histórico do Insta, ou crie um rascunho no +.</Text>
         }

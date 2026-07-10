@@ -11,7 +11,6 @@ import { CarrosselPecasScreen } from '@/screens/CarrosselPecasScreen';
 import { DropsScreen } from '@/screens/DropsScreen';
 import { DropDetailScreen } from '@/screens/DropDetailScreen';
 import { HistoricoDropScreen } from '@/screens/HistoricoDropScreen';
-import { GerarDropsScreen } from '@/screens/GerarDropsScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { SincronizarScreen } from '@/screens/SincronizarScreen';
 import { RunScreen } from '@/screens/RunScreen';
@@ -21,12 +20,11 @@ import { SettingsScreen } from '@/screens/SettingsScreen';
 
 export type RootStackParamList = {
   Hub: undefined;
-  Pecas: undefined;
+  Pecas: { categoria?: string } | undefined;
   CarrosselPecas: { fotos: string[] };
   Drops: undefined;
   DropDetail: { dropId: number; nome: string };
   HistoricoDrop: { data: string | null; titulo: string };
-  GerarDrops: undefined;
   Dashboard: undefined;
   Sincronizar: undefined;
   Run: { runId: string; nome: string };
@@ -69,7 +67,6 @@ export function RootNavigator() {
           options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="HistoricoDrop" component={HistoricoDropScreen}
           options={({ route }) => ({ title: route.params.titulo })} />
-        <Stack.Screen name="GerarDrops" component={GerarDropsScreen} options={{ title: 'Gerar drops' }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Stack.Screen name="Sincronizar" component={SincronizarScreen} options={{ title: 'Sincronizar brechó' }} />
         <Stack.Screen name="Run" component={RunScreen} options={({ route }) => ({ title: route.params.nome })} />
