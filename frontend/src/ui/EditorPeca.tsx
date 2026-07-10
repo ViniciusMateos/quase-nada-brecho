@@ -60,14 +60,14 @@ type Form = {
   id: number | null; nome: string; item: string; tamanho: string; largura: string; comprimento: string;
   medidas: Medida[]; observacao: string; condicao: string; compra: string; venda: string; vendida: boolean;
   consignado: boolean; consigTipo: 'pct' | 'valor'; consigPct: string; consigValor: string; soManual: boolean;
-  template: string;
+  template: string; codigo: number | null;
   drop_id: number | null; imagem_url: string | null; fotoLocal: string | null; origem: string; code: string | null;
   postado_em: string | null;
 };
 const FORM_VAZIO: Form = {
   id: null, nome: '', item: '', tamanho: '', largura: '', comprimento: '', medidas: [], observacao: '',
   condicao: '', compra: '', venda: '', vendida: false, consignado: false, consigTipo: 'pct', consigPct: '',
-  consigValor: '', soManual: false, template: '',
+  consigValor: '', soManual: false, template: '', codigo: null,
   drop_id: null, imagem_url: null, fotoLocal: null, origem: 'manual', code: null, postado_em: null,
 };
 function paraForm(p: Peca): Form {
@@ -80,7 +80,7 @@ function paraForm(p: Peca): Form {
     consigTipo: p.consig_tipo === 'valor' ? 'valor' : 'pct',
     consigPct: p.consig_pct != null ? String(p.consig_pct) : '',
     consigValor: p.consig_valor != null ? String(p.consig_valor) : '',
-    soManual: p.so_manual, template: p.template ?? '',
+    soManual: p.so_manual, template: p.template ?? '', codigo: p.num ?? null,
     drop_id: p.drop_id, imagem_url: p.imagem_url, fotoLocal: null,
     origem: p.origem ?? 'manual', code: p.code, postado_em: p.postado_em,
   };
@@ -89,13 +89,15 @@ function paraForm(p: Peca): Form {
 // Gera o template da legenda pra copiar/colar no post (mesmo formato do brechó).
 function gerarTemplate(f: Form): string {
   const L: string[] = [];
-  // peça vendida (pelo scraper ou pelo toggle): marca no topo + linha em branco,
+  // peça vendida (pelo scraper ou pelo toggle): '| ❌VENDIDA❌' no topo + linha em branco,
   // e sem o preço (omitido mais abaixo) — mesmo formato do post vendido no Insta.
   if (f.vendida) {
-    L.push('❌VENDIDA❌');
+    L.push('| ❌VENDIDA❌');
     L.push('');
+    L.push((f.nome.trim() || f.item.trim()).trim());
+  } else {
+    L.push(`| ${f.nome.trim() || f.item.trim()}`.trimEnd());
   }
-  L.push(`| ${f.nome.trim() || f.item.trim()}`.trimEnd());
   const partes: string[] = [];
   if (f.largura.trim()) partes.push(`l ${f.largura.trim()}cm`);
   if (f.comprimento.trim()) partes.push(`c ${f.comprimento.trim()}cm`);
@@ -120,7 +122,10 @@ function gerarTemplate(f: Form): string {
   L.push('comente "fila"');
   L.push('.');
   L.push('.');
-  L.push('#brechoonline #brecho');
+  // código da peça (#p<num>) junto das hashtags — é a chave de match da raspagem
+  const tags = ['#brechoonline', '#brecho'];
+  if (f.codigo != null) tags.push(`#p${f.codigo}`);
+  L.push(tags.join(' '));
   return L.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
