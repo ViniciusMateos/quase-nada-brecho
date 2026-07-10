@@ -73,6 +73,15 @@ export function BarraScraperGlobal({ onAbrir }: { onAbrir?: (runId: string) => v
     }
   }, [ativo]);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // segurança: sem run ativa, garante o desmonte mesmo se a animação de saída for
+  // interrompida (a RunScreen re-renderiza muito com os logs e pode travar o callback
+  // do Animated) — evita o widget ficar "preso" mostrando a última % de uma run parada.
+  useEffect(() => {
+    if (ativo) return;
+    const t = setTimeout(() => setMontado(false), 600);
+    return () => clearTimeout(t);
+  }, [ativo]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   // recolhe em bolha quando o usuário toca/scrolla a tela
   useEffect(() => {
     return interacaoBus.ouvir(() => {
