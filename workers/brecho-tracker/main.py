@@ -56,32 +56,6 @@ def _reinjetar_sessao(ig):
             log.warning("Falha re-injetando cookies (%s): %s", COOKIES_FILE, e)
 
 
-def baixar_thumbs(ig, pecas):
-    """Baixa a foto de capa de cada peça e salva uma miniatura local (cache).
-    Só baixa o que ainda não tem — runs seguintes ficam rápidos."""
-    from PIL import Image as PILImage
-    os.makedirs(config.IMAGENS_DIR, exist_ok=True)
-    novas = falhas = 0
-    for p in pecas:
-        code, url = p.get("code"), p.get("imagem_url")
-        destino = os.path.join(config.IMAGENS_DIR, f"{code}.jpg")
-        if not (code and url) or os.path.exists(destino):
-            continue
-        raw = ig.baixar_bytes(url)
-        if not raw:
-            falhas += 1
-            continue
-        try:
-            im = PILImage.open(io.BytesIO(raw)).convert("RGB")
-            im.thumbnail((config.THUMB_W, config.THUMB_W))   # cabe na caixa, mantém proporção
-            im.save(destino, "JPEG", quality=80)
-            novas += 1
-        except Exception:
-            falhas += 1
-    log.info("Miniaturas: %d novas baixadas%s (cache em output/imagens/).",
-             novas, f", {falhas} falharam" if falhas else "")
-
-
 def modo_importar_cookies(path):
     cookies = carregar_cookies(path)
     log.info("Importando %d cookies de %s…", len(cookies), path)
@@ -129,36 +103,30 @@ def raspar(ig, boundary):
     return pecas
 
 
-def resumo_dry(pecas, db, antiga):
-    """Mostra o que mudaria, sem gravar."""
-    db2 = {k: dict(v) for k, v in db.items()}
-    _, stats = planilha.reconciliar(db2, pecas, antiga)
-    k = planilha._kpis(db2)
-    log.info("──────────── DRY-RUN (nada gravado) ────────────")
-    log.info("   peças raspadas ........ %d", len(pecas))
-    log.info("   novas na planilha ..... %d", stats["novas"])
-    log.info("   atualizadas ........... %d", stats["atualizadas"])
-    log.info("   recém-vendidas ........ %d", stats["recem_vendidas"])
-    log.info("   ─ KPIs projetados ─")
-    log.info("   faturamento total ..... R$ %.2f", k["faturamento total"])
-    log.info("   projeção faturamento .. R$ %.2f", k["projeção faturamento total"])
-    log.info("   gastos totais (tudo) .. R$ %.2f", k["gastos totais"])
-    log.info("   custo das vendidas .... R$ %.2f", k["custo das vendidas"])
-    log.info("   lucro líquido (vendas)  R$ %.2f", k["lucro líquido"])
-    log.info("   peças: %d | vendidas: %d | disponíveis: %d",
-             k["peças"], k["vendidas"], k["disponíveis"])
-    log.info("   tempo de execução ..... %s", _dur_run())
-    log.info("─────────────────────────────────────────────────")
+def _dump_pecas(pecas):
+    """Entrega as peças parseadas (com #p<num>) num JSON pro BACKEND — é o APP que reconcilia
+    e é a fonte da verdade (dry: prevê com rollback; normal: aplica). Uma lista só, sempre sync."""
+    import json
+    itens = [{
+        "code": p.get("code"), "drop": p.get("drop"), "item": p.get("item"),
+        "nome": p.get("nome"), "tamanho": p.get("tamanho"),
+        "largura": p.get("largura"), "comprimento": p.get("comprimento"),
+        "circunferencia": p.get("circunferencia"), "condicao": p.get("condicao"),
+        "venda": p.get("preco"), "vendida": bool(p.get("vendida")),
+        "imagem_url": p.get("imagem_url"), "numero": p.get("numero"),
+    } for p in pecas if p.get("code")]
+    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+    with open(os.path.join(config.OUTPUT_DIR, "pecas.json"), "w", encoding="utf-8") as f:
+        json.dump(itens, f, ensure_ascii=False)
 
 
 def run(dry=False, full=False):
     log.info("Iniciando%s%s…", " (DRY-RUN)" if dry else "", " (FULL)" if full else "")
+    # a planilha é um ESPELHO do app (o backend reescreve antes de raspar) — usada só pra
+    # calcular o boundary (até onde descer o feed). Quem reconcilia/é a verdade é o APP.
     db = planilha.carregar_db()
     if db:
-        log.info("Planilha atual: %d peças já cadastradas.", len(db))
-    antiga = planilha.carregar_planilha_antiga() if (not db or full) else []
-    if antiga:
-        log.info("Referência p/ match: %d peças da planilha antiga.", len(antiga))
+        log.info("App tem %d peças cadastradas.", len(db))
     boundary = None if (full or not db) else planilha.boundary_disponivel(db)
 
     log.info("Abrindo navegador (Chrome)… isso leva alguns segundos.")
@@ -170,38 +138,19 @@ def run(dry=False, full=False):
             return
         ig.carregar_tokens()
         pecas = raspar(ig, boundary)
-        if pecas and not dry:                 # baixa as fotos ainda com a sessão aberta
-            baixar_thumbs(ig, pecas)
+        # (sem download de fotos: o app usa o link da CDN direto; a foto de upload local
+        #  das peças achadas é trocada pelo link no backend, na reconciliação do import)
 
     if not pecas:
-        log.info("Nenhuma peça raspada. Nada a fazer.")
+        log.info("Nenhuma peça nova no feed. Nada a atualizar.")
+        _dump_pecas([])
         return
 
-    if dry:
-        resumo_dry(pecas, db, antiga)
-        return
-
-    db, stats = planilha.reconciliar(db, pecas, antiga)
-    if antiga:                                 # 2ª passada: casa drop-a-drop o que faltou
-        n = planilha.backfill_antiga(db, antiga)
-        if n:
-            log.info("Backfill da antiga: %d valores (compra/venda) preenchidos.", n)
-    k = planilha.salvar(db)
-    log.info("Planilha atualizada: %s", config.PLANILHA_SAIDA)
-    log.info("   novas: %d | atualizadas: %d | recém-vendidas: %d",
-             stats["novas"], stats["atualizadas"], stats["recem_vendidas"])
-    log.info("   faturamento R$ %.2f | projeção R$ %.2f", k["faturamento total"],
-             k["projeção faturamento total"])
-    log.info("   gastos(tudo) R$ %.2f | custo vendidas R$ %.2f | lucro R$ %.2f",
-             k["gastos totais"], k["custo das vendidas"], k["lucro líquido"])
-    log.info("   peças: %d | vendidas: %d | disponíveis: %d",
-             k["peças"], k["vendidas"], k["disponíveis"])
-    log.info("   tempo de execução ..... %s", _dur_run())
-    # marcador machine-readable pro histórico (vai pro stdout E pro run.log)
-    log.info("[saldo] novas=%d atualizadas=%d recem_vendidas=%d total=%d disponiveis=%d",
-             stats["novas"], stats["atualizadas"], stats["recem_vendidas"], k["peças"], k["disponíveis"])
-    nb = planilha.boundary_disponivel(db)
-    log.info("   próximo boundary (drop mais antigo disponível): %s", nb or "(nenhum)")
+    # Entrega as peças pro APP. O que muda por peça (casada/nova/vendeu) e o resumo vêm do
+    # app — IGUAL no dry e no normal; o dry só não grava. Tempo: %s
+    _dump_pecas(pecas)
+    log.info("Raspagem concluída em %s: %d peças entregues pro app%s.",
+             _dur_run(), len(pecas), " (simulação)" if dry else "")
 
 
 def rematch():

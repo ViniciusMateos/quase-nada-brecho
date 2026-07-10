@@ -60,6 +60,7 @@ _MIGRACOES = [
     ("pecas", "consig_valor", "REAL"),  # R$ fixo que fica pra mim por venda — modo 'valor'
     ("pecas", "so_manual", "INTEGER NOT NULL DEFAULT 0"),  # peça travada: o scraper NÃO atualiza
     ("pecas", "template", "TEXT"),  # legenda do post customizada à mão (senão gera automático no app)
+    ("pecas", "num", "INTEGER"),   # código sequencial da peça (#p<num> na legenda, chave de match)
 ]
 
 
@@ -70,6 +71,13 @@ def init_db():
         for _tab, col, tipo in _MIGRACOES:
             if col not in existentes:
                 c.execute(f"ALTER TABLE pecas ADD COLUMN {col} {tipo}")
+        # backfill: dá número sequencial pras peças que ainda não têm (ordem de criação)
+        base = c.execute("SELECT COALESCE(MAX(num), 0) FROM pecas").fetchone()[0]
+        for i, r in enumerate(
+                c.execute("SELECT id FROM pecas WHERE num IS NULL ORDER BY id").fetchall(),
+                start=base + 1):
+            c.execute("UPDATE pecas SET num = ? WHERE id = ?", (i, r["id"]))
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pecas_num ON pecas(num) WHERE num IS NOT NULL")
 
 
 @contextmanager

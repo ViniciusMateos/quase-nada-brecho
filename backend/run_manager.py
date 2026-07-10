@@ -117,6 +117,13 @@ class RunManager:
     async def start(self, params):
         run = Run(params)
         self.runs[run.id] = run
+        # antes de raspar: reescreve a planilha do worker A PARTIR DO APP (espelho sincronizado)
+        # — o worker usa só pro boundary; quem é a fonte da verdade é o app.
+        if not (params or {}).get("import_cookies"):
+            try:
+                await asyncio.to_thread(scraper.sincronizar_planilha)
+            except Exception as e:
+                print(f"[sync] falha ao espelhar planilha: {e}", flush=True)
         cmd = [settings.PYTHON_BIN] + scraper.montar_cmd(params)
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
         run.proc = await asyncio.create_subprocess_exec(
@@ -152,15 +159,32 @@ class RunManager:
         if run.status != "parado":
             run.status = "finalizado" if run.returncode == 0 else "erro"
 
-        # raspagem OK → importa a planilha pro banco
+        # raspagem OK → dry-run: PRÉVIA do app (rollback); normal: importa de verdade
         if run.status == "finalizado" and not run.params.get("import_cookies"):
+            dry = bool(run.params.get("dry_run"))
             try:
-                stats = await asyncio.to_thread(scraper.importar)
-                await run.emitir(
-                    f"[backend] planilha importada pro app: {stats['novas']} novas, "
-                    f"{stats['atualizadas']} atualizadas, {stats.get('reconciliadas', 0)} reconciliadas.")
+                st = await asyncio.to_thread(scraper.preview_import if dry else scraper.importar)
+                if st:
+                    evs = st.get("eventos", [])
+                    for ev in evs[:120]:
+                        await run.emitir(ev)
+                    if len(evs) > 120:
+                        await run.emitir(f"   … e mais {len(evs) - 120} peças")
+                    nada = "  (nada gravado)" if dry else ""
+                    conf = f", {st['conferidas']} sem mudança" if st.get("conferidas") else ""
+                    await run.emitir(
+                        f"resumo: {st['novas']} novas, {st.get('reconciliadas', 0)} relacionadas, "
+                        f"{st['atualizadas']} atualizadas, {st.get('recem_vendidas', 0)} venderam{conf}{nada}")
+                    if not dry:
+                        run.saldo = {"novas": st["novas"], "atualizadas": st["atualizadas"],
+                                     "reconciliadas": st.get("reconciliadas", 0),
+                                     "recem_vendidas": st.get("recem_vendidas", 0)}
+                        try:      # re-espelha a planilha com o app já atualizado
+                            await asyncio.to_thread(scraper.sincronizar_planilha)
+                        except Exception:
+                            pass
             except Exception as e:
-                await run.emitir(f"[backend] falha importando a planilha: {e}")
+                await run.emitir(f"[backend] falha no import/simulação do app: {e}")
 
         await run.emitir(f"[backend] processo terminou (status={run.status}, code={run.returncode})")
         self._gravar_historico(run)

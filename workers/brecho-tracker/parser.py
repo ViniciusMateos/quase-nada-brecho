@@ -23,6 +23,7 @@ _CIRC_RX = re.compile(r"([\d.,]+)\s*cm\s*circunfer", re.I)
 _SOLO_RX = re.compile(r"\(\s*([\d.,]+)\s*cm\s*\)")          # ex.: (27,5 cm) — tênis
 _COND_RX = re.compile(r"condi[çc][ãa]o\s*:\s*(\d+\s*/\s*10)", re.I)
 _PRECO_RX = re.compile(r"r\$\s*:?\s*([\d.,]+)", re.I)
+_NUM_RX = re.compile(r"#p(\d+)\b", re.I)   # código da peça na legenda: #p12
 _MEDIDAS_RAW_RX = re.compile(r"\(([^)]*\bcm\b[^)]*)\)", re.I)  # captura o "(...)" com cm
 
 # vocabulário de tipos de peça (best-effort p/ a coluna "item")
@@ -125,6 +126,8 @@ def parse_post(item):
     # vendida = a palavra "vendido/vendida" em QUALQUER lugar da legenda (com ou sem ❌,
     # maiúscula/minúscula, no meio de frase) — robusto, não depende do emoji nem de espaço.
     vendida = bool(_VENDIDO_RX.search(legenda))
+    mnum = _NUM_RX.search(legenda)
+    numero = int(mnum.group(1)) if mnum else None
 
     taken = item.get("taken_at")
     drop = (datetime.fromtimestamp(int(taken), tz=timezone.utc).astimezone().strftime("%Y-%m-%d")
@@ -153,6 +156,7 @@ def parse_post(item):
         "condicao": cond.group(1).replace(" ", "") if cond else None,
         "preco": _num(preco.group(1)) if preco else None,
         "vendida": vendida,
+        "numero": numero,   # #p<num> da legenda — código da peça pro match no app
     }
 
 

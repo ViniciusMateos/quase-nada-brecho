@@ -46,7 +46,7 @@ _CACHE_ANTIGA = os.path.join(config.OUTPUT_DIR, "antiga_cache.json")
 COLUNAS = [
     "code", "drop", "imagem", "item", "nome", "compra", "venda", "tamanho",
     "largura", "comprimento", "circunferencia", "condicao", "vendida", "url",
-    "atualizado_em", "imagem_url",
+    "atualizado_em", "imagem_url", "numero",
 ]
 COL_OCULTAS = ("imagem_url",)
 
@@ -304,6 +304,7 @@ def reconciliar(db, pecas_raspadas, antiga):
                 "condicao": p["condicao"], "venda": p["preco"],
                 "vendida": _to_sim_nao(p["vendida"]), "url": p["url"],
                 "imagem_url": p.get("imagem_url"), "atualizado_em": agora,
+                "numero": p.get("numero"),   # #p<num> lido da legenda (match no app)
             })
             # casa com a antiga p/ trazer o que o IG não tem (custo; e preço se vendida)
             if antiga:
@@ -315,8 +316,8 @@ def reconciliar(db, pecas_raspadas, antiga):
                         linha["venda"] = m.get("venda")
             db[code] = linha
             novas += 1
-            log.info("  ADICIONADA: %s — %s",
-                     linha.get("nome") or code, _fmt_valor(linha.get("venda")))
+            log.debug("  [planilha] nova: %s — %s",
+                      linha.get("nome") or code, _fmt_valor(linha.get("venda")))
             continue
 
         # ── peça conhecida: atualiza raspado, preserva manual (compra) ──
@@ -335,6 +336,8 @@ def reconciliar(db, pecas_raspadas, antiga):
         atual["url"] = p["url"]
         if p.get("imagem_url"):
             atual["imagem_url"] = p["imagem_url"]
+        if p.get("numero") is not None:
+            atual["numero"] = p["numero"]
         atual["atualizado_em"] = agora
 
         # detecta e loga o que mudou (preço de quanto→quanto, vendeu, condição)
@@ -349,7 +352,7 @@ def reconciliar(db, pecas_raspadas, antiga):
         if cond_antes is not None and atual.get("condicao") != cond_antes:
             mud.append(f"condição {cond_antes} → {atual.get('condicao')}")
         if mud:
-            log.info("  ATUALIZADA: %s — %s", atual.get("nome") or code, " · ".join(mud))
+            log.debug("  [planilha] atualizada: %s — %s", atual.get("nome") or code, " · ".join(mud))
             atualizadas += 1
 
     return db, {"novas": novas, "atualizadas": atualizadas, "recem_vendidas": recem_vendidas}

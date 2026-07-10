@@ -119,6 +119,7 @@ def _peca_dict(r):
         "drop_data": r["drop_data"],
         "origem": r["origem"] if "origem" in r.keys() else "manual",
         "code": r["code"] if "code" in r.keys() else None,
+        "num": r["num"] if "num" in r.keys() else None,
         "postado_em": r["postado_em"] if "postado_em" in r.keys() else None,
     }
 
@@ -145,13 +146,14 @@ def obter(peca_id):
 def add(campos):
     d = _coagir(campos)
     with conn() as c:
+        d["num"] = _proximo_num(c)   # código sequencial da peça (#p<num>)
         cur = c.execute(
             """INSERT INTO pecas (nome, item, tamanho, largura, comprimento, medida, observacao,
                                   condicao, compra, venda, vendida, drop_id, consignado, consig_pct,
-                                  consig_tipo, consig_valor, so_manual, template)
+                                  consig_tipo, consig_valor, so_manual, template, num)
                VALUES (:nome, :item, :tamanho, :largura, :comprimento, :medida, :observacao,
                        :condicao, :compra, :venda, :vendida, :drop_id, :consignado, :consig_pct,
-                       :consig_tipo, :consig_valor, :so_manual, :template)""",
+                       :consig_tipo, :consig_valor, :so_manual, :template, :num)""",
             {
                 "nome": d.get("nome"), "item": d.get("item"), "tamanho": d.get("tamanho"),
                 "largura": d.get("largura"), "comprimento": d.get("comprimento"),
@@ -162,6 +164,7 @@ def add(campos):
                 "consignado": d.get("consignado", 0), "consig_pct": d.get("consig_pct"),
                 "consig_tipo": d.get("consig_tipo", "pct"), "consig_valor": d.get("consig_valor"),
                 "so_manual": d.get("so_manual", 0), "template": d.get("template"),
+                "num": d.get("num"),
             },
         )
         pid = cur.lastrowid
@@ -201,15 +204,69 @@ def _norm(s):
     return (s or "").strip().lower()
 
 
+def _proximo_num(c):
+    """Próximo código sequencial de peça (#p<num>). Nunca reusa, mesmo após exclusão."""
+    return (c.execute("SELECT COALESCE(MAX(num), 0) FROM pecas").fetchone()[0] or 0) + 1
+
+
+def _rs(v):
+    """Formata valor em R$ ('R$ 120' / 'R$ 39,90'); None se vazio/zero."""
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    if v <= 0:
+        return None
+    return f"R$ {int(v)}" if v == int(v) else "R$ " + f"{v:.2f}".replace(".", ",")
+
+
+def _ev(label, num, nome, mud):
+    """Monta a linha do evento: 'LABEL | nome - p#12  ·  mudança  ·  mudança'."""
+    ms = [m for m in mud if m]
+    base = f"{label} | {nome} - p#{num}"
+    return base + ("  ·  " + "  ·  ".join(ms) if ms else "")
+
+
+def _mudancas(antes, campos, v_insta):
+    """Lista de 'campo antes → depois' — só o que REALMENTE mudou (Insta é a fonte da verdade)."""
+    mud = []
+
+    def _s(v):
+        return str(v).strip() if v not in (None, "") else ""
+
+    def _mesmo_num(a, b):
+        try:
+            return float(a.replace(",", ".")) == float(b.replace(",", "."))
+        except (ValueError, AttributeError):
+            return False
+
+    def dif(rotulo, a, b, numerico=False):
+        a, b = _s(a), _s(b)
+        if b and a != b and not (numerico and _mesmo_num(a, b)):
+            mud.append(f"{rotulo} {a or '—'} → {b}")
+
+    dif("nome:", antes["nome"], campos.get("nome"))
+    if v_insta > 0:
+        pa, pb = _rs(antes["venda"]), _rs(v_insta)
+        if pb and pa != pb:
+            mud.append(f"preço {pa or '—'} → {pb}")
+    dif("tam", antes["tamanho"], campos.get("tamanho"))
+    dif("larg", antes["largura"], campos.get("largura"), numerico=True)
+    dif("comp", antes["comprimento"], campos.get("comprimento"), numerico=True)
+    dif("cond", antes["condicao"], campos.get("condicao"))
+    return mud
+
+
 # ───────────────────── import do scraper ─────────────────────────
-def upsert_scraper(items):
+def upsert_scraper(items, preview=False):
     """Recebe peças raspadas (com `code`) e sincroniza no banco:
       - já existe com esse code → atualiza (preserva compra/venda manuais);
       - existe uma peça MANUAL planejada de mesmo nome (sem code) → reconcilia:
         promove ela a 'scraper' (ganha o drop real, sai do planejamento);
       - senão → insere nova.
     Devolve stats {novas, atualizadas, reconciliadas, total}."""
-    novas = atualizadas = reconciliadas = 0
+    novas = atualizadas = reconciliadas = recem_vendidas = conferidas = 0
+    eventos = []   # log peça-a-peça do que muda NO APP (é o que aparece no run, dry ou normal)
     publicar = {}   # drop_id (manual) -> data do post no Insta: as peças do drop apareceram lá
     with conn() as c:
         for it in items:
@@ -237,60 +294,106 @@ def upsert_scraper(items):
             mj = _medida_json_circ(it.get("circunferencia"))
             if mj:
                 campos["medida"] = mj
-            existe = c.execute("SELECT id, so_manual, drop_id FROM pecas WHERE code = ?", (code,)).fetchone()
-            if existe:
-                if existe["so_manual"]:
-                    continue   # peça travada como manual: scraper não atualiza
+            nome_disp = (it.get("nome") or code)[:36]
+            vend_nova = 1 if it.get("vendida") else 0
+            numero = it.get("numero")   # do #p<num> na legenda — chave de match mais confiável
+            sel = ("id, so_manual, drop_id, origem, vendida, num, nome, venda, "
+                   "tamanho, largura, comprimento, condicao")
+            # casa por NÚMERO primeiro (pega até a peça manual planejada, sem depender do nome);
+            # senão, casa por CÓDIGO do post (peça já raspada antes).
+            alvo = None
+            if numero:
+                alvo = c.execute(f"SELECT {sel} FROM pecas WHERE num = ?", (numero,)).fetchone()
+            if not alvo:
+                alvo = c.execute(f"SELECT {sel} FROM pecas WHERE code = ?", (code,)).fetchone()
+            if alvo:
+                if alvo["so_manual"]:
+                    eventos.append(f"TRAVADA | {nome_disp} - p#{alvo['num']} (ignorada)")
+                    continue   # peça travada como manual: scraper não atualiza nem duplica
+                virou_vendida = bool(vend_nova and not alvo["vendida"])
+                mud = _mudancas(alvo, campos, v_insta)
                 sets = ", ".join(f"{k} = :{k}" for k in campos)
-                c.execute(f"UPDATE pecas SET {sets} WHERE code = :code", {**campos, "code": code})
-                atualizadas += 1
-                if existe["drop_id"] is not None and campos.get("postado_em"):
-                    publicar[existe["drop_id"]] = campos["postado_em"]
+                # atualiza; se casou uma peça MANUAL (pelo num), promove a scraper e dá o code
+                c.execute(f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
+                          {**campos, "code": code, "id": alvo["id"]})
+                manual = alvo["origem"] == "manual"
+                if manual:
+                    reconciliadas += 1
+                if virou_vendida:
+                    recem_vendidas += 1
+                    mud = ([_rs(alvo["venda"])] if _rs(alvo["venda"]) else []) + mud
+                    eventos.append(_ev("VENDIDA", alvo["num"], nome_disp, mud))
+                elif manual:
+                    eventos.append(_ev("RELACIONADA", alvo["num"], nome_disp, mud))
+                elif mud:
+                    atualizadas += 1
+                    eventos.append(_ev("ATUALIZADA", alvo["num"], nome_disp, mud))
+                else:
+                    conferidas += 1   # peça existente SEM mudança real → não loga (evita spam)
+                if alvo["drop_id"] is not None and campos.get("postado_em"):
+                    publicar[alvo["drop_id"]] = campos["postado_em"]
                 continue
 
-            # reconciliação: peça manual planejada (sem code) de mesmo nome vira scraper.
-            # peças travadas como 'só manual' ficam de fora (so_manual = 0).
+            # reconciliação por NOME (peça manual planejada sem num/tag na legenda — legado).
             nome = _norm(it.get("nome"))
             match = None
             if nome:
                 match = c.execute(
-                    "SELECT id, drop_id FROM pecas WHERE origem = 'manual' AND code IS NULL AND so_manual = 0 "
+                    f"SELECT {sel} FROM pecas WHERE origem = 'manual' AND code IS NULL "
                     "AND lower(trim(nome)) = ?", (nome,)).fetchone()
+            if match and match["so_manual"]:
+                eventos.append(f"TRAVADA | {nome_disp} - p#{match['num']} (ignorada)")
+                continue   # peça TRAVADA de mesmo nome já existe → não atualiza NEM duplica
             if match:
+                virou_vendida = bool(vend_nova and not match["vendida"])
+                mud = _mudancas(match, campos, v_insta)
                 sets = ", ".join(f"{k} = :{k}" for k in campos)
                 if match["drop_id"] is not None:
-                    # a peça estava planejada num drop manual e apareceu no Insta → o drop foi
-                    # publicado. Ela FICA no drop (só vira 'scraper' pra ganhar code/vendida do post),
-                    # e o drop é marcado publicado + data sincronizada com o Insta (mais abaixo).
                     c.execute(
                         f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
                         {**campos, "code": code, "id": match["id"]})
                     if campos.get("postado_em"):
                         publicar[match["drop_id"]] = campos["postado_em"]
                 else:
-                    # peça planejada sem drop → vira histórico puro (agrupa pela data do post)
                     c.execute(
                         f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code, drop_id = NULL "
                         "WHERE id = :id", {**campos, "code": code, "id": match["id"]})
                 reconciliadas += 1
+                label = "RELACIONADA"
+                if virou_vendida:
+                    recem_vendidas += 1
+                    label = "VENDIDA"
+                    mud = ([_rs(match["venda"])] if _rs(match["venda"]) else []) + mud
+                eventos.append(_ev(label, match["num"], nome_disp, mud))
             else:
+                novo_num = _proximo_num(c)   # nova peça raspada ganha código sequencial
                 c.execute(
                     """INSERT INTO pecas (nome, item, tamanho, largura, comprimento, medida,
                                           condicao, compra, venda, vendida,
-                                          imagem_url, origem, code, postado_em)
+                                          imagem_url, origem, code, postado_em, num)
                        VALUES (:nome, :item, :tamanho, :largura, :comprimento, :medida,
                                :condicao, :compra, :venda, :vendida,
-                               :imagem_url, 'scraper', :code, :postado_em)""",
+                               :imagem_url, 'scraper', :code, :postado_em, :num)""",
                     {**campos, "medida": campos.get("medida"), "compra": _num(it.get("compra")),
-                     "venda": _num(it.get("venda")), "code": code})
+                     "venda": _num(it.get("venda")), "code": code, "num": novo_num})
                 novas += 1
+                pr = _rs(v_insta)
+                mud = [pr] if pr else []
+                if vend_nova:
+                    recem_vendidas += 1
+                    mud = mud + ["já vendida"]
+                eventos.append(_ev("NOVA", novo_num, nome_disp, mud))
 
         # drops manuais cujas peças apareceram no Insta → publicado + data do Insta (fonte da verdade)
         for did, data_post in publicar.items():
             c.execute("UPDATE drops SET status = 'publicado', data = ? WHERE id = ?", (data_post, did))
 
+        if preview:
+            c.rollback()   # dry-run: calcula o que MUDARIA e desfaz tudo (não grava nada)
+
     return {"novas": novas, "atualizadas": atualizadas, "reconciliadas": reconciliadas,
-            "drops_publicados": len(publicar),
+            "recem_vendidas": recem_vendidas, "conferidas": conferidas,
+            "drops_publicados": len(publicar), "eventos": eventos,
             "total": novas + atualizadas + reconciliadas}
 
 
