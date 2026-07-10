@@ -14,14 +14,14 @@ quase-nada-brecho/
 │   ├── app.py        rotas da API + WebSocket de logs
 │   ├── db.py         schema + conexão SQLite
 │   ├── pecas.py      CRUD das peças + KPIs do dashboard
-│   ├── drops.py      CRUD dos drops + gerador automático
+│   ├── drops.py      CRUD dos drops + histórico unificado por data
 │   ├── scraper.py    ponte com o worker + import da planilha → SQLite
 │   ├── run_manager.py  roda o scraper como subprocesso e faz stream do log
 │   ├── notify.py     push (Expo) quando a raspagem termina
 │   └── settings.py   config (token, paths, worker)
 ├── frontend/         Expo / React Native (mesmo esqueleto dos outros apps QN)
 │   └── src/
-│       ├── screens/  Hub, Peças, Drops, DropDetail, GerarDrops, Dashboard,
+│       ├── screens/  Hub, Peças, Drops, DropDetail, Histórico, Dashboard,
 │       │             Sincronizar, Run (logs ao vivo), InstagramLogin, Settings
 │       ├── lib/      api + cliente axios + push
 │       ├── ui/       componentes (loader do cachorro, botões, cards, progresso)
@@ -47,27 +47,35 @@ quase-nada-brecho/
   toggle **Manual** ligado, o template vira **editável** e o texto customizado é salvo.
 - **Drops** — agrupa peças em drops datados (rascunho → agendado → publicado). Cada card mostra
   peças vendidas, faturamento, gasto, lucro e a **projeção** (faturamento se tudo vender).
-- **Gerar drops** — o motor: distribui N peças em K drops (ou X por drop) de forma
-  equilibrada e já monta o cronograma (semanal, quinzenal, etc). Ex.: 65 peças em 6 drops
-  → `[11, 11, 11, 11, 11, 10]` em datas espaçadas.
+- **Código #p** — cada peça tem um número sequencial (`#p123`) que entra nas hashtags do
+  template e é lido de volta da legenda no Insta. É a chave mais confiável pra casar o que o
+  scraper vê com o que está no app (casa por `#p` → `code` → nome).
 - **Dashboard** — faturamento, lucro, ROI, ticket médio, estoque e quebra por drop/categoria
-  (peças consignadas entram só pela % que fica pra você).
+  (peças consignadas entram só pela % que fica pra você); as linhas de categoria são atalho
+  pra tela de peças já filtrada.
+- **Histórico** — cada raspagem vira um registro com o que mudou (atualizadas, relacionadas,
+  vendidas) e um log por peça (NOVA/RELACIONADA/ATUALIZADA/VENDIDA), filtrável por período.
 - **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
   Instagram do brechó **descendo o perfil como humano** e interceptando as respostas
   (graphql) que a própria página dispara — sem chamar a API em rajada, então **não toma
-  rate-limit** e pega o feed inteiro numa run. Tem **logs ao vivo** (WebSocket + UI animada)
-  e barra de progresso. Ao terminar, importa a planilha pro SQLite (peças com
-  `origem='scraper'`) — o dashboard reflete as vendas reais. As peças raspadas são
-  **histórico** e não entram no planejamento de drops futuros (só o catálogo manual entra
-  no gerador). Se as peças de um **drop manual** aparecem no Insta, o app entende que o
-  drop foi publicado: mantém as peças no drop, marca-o como **publicado** e **sincroniza a
-  data** com o post (Insta = fonte da verdade).
+  rate-limit** e pega o feed inteiro numa run. O worker é um **raspador puro**: só despeja
+  os posts parseados; **quem reconcilia é o backend**. O **app é a fonte única da verdade**
+  e a planilha virou só um **espelho** gerado dele. A reconciliação casa cada post por
+  `#p` → `code` → nome, atualiza preço/medidas/venda (Insta ganha nas peças disponíveis) e
+  gera um **log rico por peça**. Tem três modos: **Atualizar** (grava), **Prévia** (roda
+  igualzinho mas dá rollback, não grava nada) e **Completa** (re-lê o feed inteiro e
+  recaptura as fotos, pra quando um link do Insta expira). Não deixa **duas raspagens ao
+  mesmo tempo**, tem **logs ao vivo** (WebSocket + UI animada), barra de progresso e
+  **Live Activity** na tela de bloqueio. Peças **manuais/travadas** o scraper nunca mexe.
+  Se as peças de um **drop manual** aparecem no Insta, o app entende que o drop foi
+  publicado: mantém as peças no drop, marca-o como **publicado** e **sincroniza a data**
+  com o post.
 
 ### Fluxo do scraper
 
 1. **Conectar Instagram** (uma vez) — loga na conta pela WebView; a sessão é salva no servidor.
 2. **Atualizar agora** — dispara a raspagem; acompanha os logs em tempo real.
-3. Ao fim, a planilha é importada automaticamente pro banco.
+3. Ao fim, o backend reconcilia o que foi raspado com o acervo do app e re-espelha a planilha.
 
 > O worker tem dependências próprias (Playwright/Chrome) — veja
 > `workers/brecho-tracker/requirements.txt` e rode `playwright install chromium` no servidor.
