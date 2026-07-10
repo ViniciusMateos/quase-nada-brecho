@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, NativeScrollEvent, NativeSyntheticEvent, Pressable,
+  Animated, AppState, NativeScrollEvent, NativeSyntheticEvent, Pressable,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
@@ -23,7 +23,15 @@ type Parsed =
   | { tipo: 'kv'; label: string; valor: string }
   | { tipo: 'texto'; hora: string; texto: string; cor: string; forte: boolean };
 
-function corEvento(nivel: string, low: string): { cor: string; forte: boolean } {
+function corEvento(nivel: string, resto: string): { cor: string; forte: boolean } {
+  // eventos por peça do app: colore pelo rótulo do começo da linha
+  if (resto.startsWith('VENDIDA')) return { cor: colors.ok, forte: true };
+  if (resto.startsWith('NOVA')) return { cor: colors.laranja, forte: true };
+  if (resto.startsWith('RELACIONADA')) return { cor: '#5AA9FF', forte: false };
+  if (resto.startsWith('ATUALIZADA')) return { cor: colors.marca, forte: false };
+  if (resto.startsWith('TRAVADA')) return { cor: colors.textoFraco, forte: false };
+  if (resto.startsWith('resumo:')) return { cor: colors.texto, forte: true };
+  const low = resto.toLowerCase();
   let cor = '#D8D8D8';
   let forte = false;
   if (nivel === 'ERROR' || low.includes('erro') || low.includes('falha')) {
@@ -59,7 +67,7 @@ function parseLinha(raw: string): Parsed {
   const kv = resto.match(/^(.+?)\s*[.·]{2,}\s*(.+)$/);
   if (kv) return { tipo: 'kv', label: kv[1].trim(), valor: kv[2].trim() };
 
-  const { cor, forte } = corEvento(nivel, resto.toLowerCase());
+  const { cor, forte } = corEvento(nivel, resto);
   return { tipo: 'texto', hora, texto: resto, cor, forte };
 }
 
@@ -140,14 +148,22 @@ export function RunScreen() {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+
+    const conectar = async () => {
+      if (!alive) return;
+      try { wsRef.current?.close(); } catch { /* no-op */ }
+      setConectando(true);
       try {
         const d = await api.getRun(runId);
         if (alive) setStatus(d.status);
       } catch {}
+      if (!alive) return;
       const url = await logsWsUrl(runId);
+      if (!alive) return;
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      // o server reenvia TODO o histórico ao conectar → zera pra não duplicar na reconexão
+      ws.onopen = () => { if (alive) setLinhas([]); };
       ws.onmessage = (e) => {
         if (!alive) return;
         setConectando(false);
@@ -164,8 +180,16 @@ export function RunScreen() {
         if (alive) setConectando(false);
         try { const d = await api.getRun(runId); if (alive) setStatus(d.status); } catch {}
       };
-    })();
-    return () => { alive = false; wsRef.current?.close(); };
+    };
+
+    conectar();
+
+    // ao voltar do segundo plano o iOS mata o WebSocket → reconecta pra retomar os logs ao vivo
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active' && alive) conectar();
+    });
+
+    return () => { alive = false; wsRef.current?.close(); sub.remove(); };
   }, [runId]);
 
   async function parar() {

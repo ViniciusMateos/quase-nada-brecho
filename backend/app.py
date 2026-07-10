@@ -156,7 +156,14 @@ async def scraper_importar():
 
 @app.post("/runs", dependencies=[Depends(auth)])
 async def start_run(payload: dict = None):
-    run = await mgr.start(payload or {})
+    payload = payload or {}
+    # não deixa DUAS raspagens ao mesmo tempo (conectar Instagram é outro tipo, não conta)
+    if not payload.get("import_cookies") and any(
+        r.status in ("rodando", "iniciando") and not r.params.get("import_cookies")
+        for r in mgr.runs.values()
+    ):
+        raise HTTPException(409, "Já tem uma raspagem rodando — espera terminar.")
+    run = await mgr.start(payload)
     return run.info()
 
 

@@ -21,7 +21,16 @@ export function SincronizarScreen() {
   const carregar = useCallback(() => {
     api.listRuns().then((r) => setRuns(r.slice().reverse())).catch(() => setRuns([]));
   }, []);
-  useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
+  // enquanto a tela está aberta, atualiza o estado dos runs (pra saber se já tem raspagem rodando)
+  useFocusEffect(useCallback(() => {
+    carregar();
+    const id = setInterval(carregar, 2500);
+    return () => clearInterval(id);
+  }, [carregar]));
+
+  // já tem uma RASPAGEM rodando? (conectar Instagram não conta) → bloqueia iniciar outra
+  const raspando = runs.some(
+    (r) => ['rodando', 'iniciando'].includes(r.status) && !r.params?.import_cookies);
 
   async function rodar(params: Record<string, unknown>, nome: string) {
     setIniciando(true);
@@ -30,7 +39,8 @@ export function SincronizarScreen() {
       await iniciarLAparaRun(run.id, 'Raspando o brechó');
       nav.navigate('Run', { runId: run.id, nome });
     } catch {
-      Alert.alert('Ops', 'Não consegui iniciar. Confira o servidor/token em Configurações e se o Instagram está conectado.');
+      carregar();  // pode ter sido "já tem raspagem rodando" (409) → atualiza o estado dos botões
+      Alert.alert('Ops', 'Não consegui iniciar. Pode já ter uma raspagem rodando, ou confere o servidor/token e se o Instagram está conectado.');
     } finally {
       setIniciando(false);
     }
@@ -47,11 +57,12 @@ export function SincronizarScreen() {
             Lê os posts do @brechoquasenadaa, atualiza vendas/disponíveis e sincroniza os números
             do dashboard. As peças raspadas entram como histórico (não bagunçam o planejamento de drops).
           </Text>
-          <Botao title="Atualizar agora" onPress={() => rodar({}, 'Raspagem do brechó')} loading={iniciando} />
+          <Botao title={raspando ? 'Raspagem em andamento…' : 'Atualizar agora'}
+            onPress={() => rodar({}, 'Raspagem do brechó')} loading={iniciando} disabled={raspando || iniciando} />
           <Botao title="Prévia (não grava)" cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ dry_run: true }, 'Prévia da raspagem')} disabled={iniciando} />
+            onPress={() => rodar({ dry_run: true }, 'Prévia da raspagem')} disabled={raspando || iniciando} />
           <Botao title="Raspagem completa" cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ full: true }, 'Raspagem completa')} disabled={iniciando} />
+            onPress={() => rodar({ full: true }, 'Raspagem completa')} disabled={raspando || iniciando} />
           <Text style={styles.hint}>
             Completa = re-lê o feed inteiro e recaptura as fotos. Use quando alguma foto sumir
             (os links do Insta expiram) ou pra forçar uma atualização geral do brechó.
