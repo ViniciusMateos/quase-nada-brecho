@@ -128,6 +128,10 @@ No app (Expo Go) → **Configurações** → URL = a `https://xxxx.loca.lt`, tok
   nginx + systemd. O token da API vai como **variável de ambiente do EAS** (nunca no repo).
 - **Frontend** via EAS build (perfis `development` e `preview` no `eas.json`), já com a URL
   e o token embutidos.
+- **Updates (OTA)** com `expo-updates`: mudança de **JS** vai pro app pela internet com
+  `eas update --branch preview` — sem build nem loja. Só o **nativo** (splash, ícone, Live
+  Activity, lib nova) ainda exige build. `runtimeVersion` fica **fixo** (`1.0.0`) pra os
+  updates continuarem compatíveis com os builds instalados; só sobe quando o nativo quebrar.
 - **Scraper** roda headless no servidor. Ele **rola o perfil e intercepta as respostas**
   (em vez de chamar a API em rajada), o que evita o rate-limit do Instagram. Ainda sai por
   um **proxy residencial** (túnel SSH reverso pela internet de casa) pra usar um IP de
