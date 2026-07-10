@@ -44,7 +44,7 @@ module.exports = {
     userInterfaceStyle: 'dark',
     backgroundColor: '#0F0F0F',
     icon: current.icon,
-    splash: { image: './src/assets/splash.png', resizeMode: 'contain', backgroundColor: '#0F0F0F' },
+    splash: { image: './src/assets/splash.png', resizeMode: 'contain', backgroundColor: '#FF8234' },
     ios: {
       bundleIdentifier: current.bundleId,
       supportsTablet: false,
