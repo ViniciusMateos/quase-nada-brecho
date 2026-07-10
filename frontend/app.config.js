@@ -37,6 +37,8 @@ module.exports = {
     name: current.name,
     slug: 'quase-nada-brecho',
     version: '1.0.0',
+    runtimeVersion: { policy: 'appVersion' },
+    updates: { url: 'https://u.expo.dev/a0c13d7d-b73a-42ad-8d28-e1907c6500c9' },
     orientation: 'portrait',
     scheme: current.scheme,
     userInterfaceStyle: 'dark',
