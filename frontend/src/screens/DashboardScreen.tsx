@@ -106,7 +106,8 @@ export function DashboardScreen() {
             <TabelaHead />
             {dash.por_categoria.slice(0, 12).map((c) => (
               <TabelaLinha key={c.item} nome={c.item} vendidas={c.vendidas} total={c.total}
-                faturamento={c.faturamento} lucro={c.lucro} />
+                faturamento={c.faturamento} lucro={c.lucro}
+                onPress={() => nav.navigate('Pecas', { categoria: c.item })} />
             ))}
           </Card>
         </Aparece>
@@ -117,8 +118,8 @@ export function DashboardScreen() {
           <Card style={{ gap: 6 }}>
             <Secao>Por drop ({dash.por_drop.length})</Secao>
             <TabelaHead col1="drop" />
-            {dash.por_drop.slice(0, 12).map((d) => (
-              <TabelaLinha key={d.drop}
+            {dash.por_drop.slice(0, 12).map((d, i) => (
+              <TabelaLinha key={`drop-${d.numero ?? d.drop}-${i}`}
                 nome={d.numero != null ? `Drop ${d.numero}` : rotuloDrop(d.drop)}
                 sub={d.numero != null ? rotuloDrop(d.drop) : undefined}
                 vendidas={d.vendidas} total={d.total} faturamento={d.faturamento} lucro={d.lucro}

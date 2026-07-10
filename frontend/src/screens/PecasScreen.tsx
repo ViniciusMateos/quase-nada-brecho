@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Alert, Animated, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { api, DropResumo, Peca } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
 import { colors } from '@/theme';
-import { Pressavel } from '@/ui/components';
+import { Aparece, Pressavel } from '@/ui/components';
 import { EditorPeca } from '@/ui/EditorPeca';
 import { MenuContexto } from '@/ui/MenuContexto';
 import { LoadingDog, TelaCarregando } from '@/ui/LoadingDog';
@@ -41,16 +41,20 @@ function pctStr(recebe: number, venda: number): string {
 export function PecasScreen() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation<Nav>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Pecas'>>();
   const [pecas, setPecas] = useState<Peca[] | null>(null);
   const [drops, setDrops] = useState<DropResumo[]>([]);
   const [base, setBase] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [ordem, setOrdem] = useState<'recente' | 'antiga'>('recente');
-  const [categoria, setCategoria] = useState<string | null>(null);
+  // categoria já vem filtrada quando chega do Dashboard (toque numa categoria)
+  const [categoria, setCategoria] = useState<string | null>(route.params?.categoria ?? null);
   const [dropAberto, setDropAberto] = useState(false);
   const [busca, setBusca] = useState('');
   // editor compartilhado (@/ui/EditorPeca): null = fechado; { peca:null } = nova; { peca } = editar
   const [editar, setEditar] = useState<{ peca: Peca | null } | null>(null);
+  const [tick, setTick] = useState(0);   // muda a cada troca de filtro → re-anima os cards
+  const bump = () => setTick((t) => t + 1);
 
   // Drop a que a peça pertence: manual (pelo drop_id) ou histórico do scraper (pela data do post).
   function dropDaPeca(drop_id: number | null, postado_em: string | null): DropResumo | undefined {
@@ -113,7 +117,7 @@ export function PecasScreen() {
     ]).finally(() => { if (t) { clearTimeout(t); t = null; } setRecarregando(false); });
   }, []);
   useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
-  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar, 112);
+  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar, 162);
 
   // URL absoluta (Insta) passa direto; caminho relativo (/uploads) recebe o host
   const img = (u: string | null) => (u ? { uri: /^https?:/.test(u) ? u : `${base}${u}` } : undefined);
@@ -166,29 +170,28 @@ export function PecasScreen() {
       </View>
       <View style={styles.chips}>
         {(['todas', 'disponiveis', 'vendidas', 'sem-drop'] as Filtro[]).map((f) => (
-          <TouchableOpacity key={f} onPress={() => setFiltro(f)}
-            style={[styles.chip, filtro === f && styles.chipOn]}>
+          <ChipBtn key={f} on={filtro === f} onPress={() => { setFiltro(f); bump(); }}>
             <Text style={[styles.chipTxt, filtro === f && styles.chipTxtOn]}>
               {f === 'todas' ? `Todas (${pecas.length})` : f === 'disponiveis' ? 'Disponíveis'
                 : f === 'vendidas' ? 'Vendidas' : 'Sem drop'}
             </Text>
-          </TouchableOpacity>
+          </ChipBtn>
         ))}
         {categorias.length > 0 && (
-          <TouchableOpacity onPress={() => setDropAberto(true)} style={[styles.chip, styles.chipDrop, !!categoria && styles.chipOn]}>
+          <ChipBtn on={!!categoria} onPress={() => setDropAberto(true)} extra={styles.chipDrop}>
             <Ionicons name="pricetag-outline" size={12} color={categoria ? '#FFFFFF' : colors.marca} />
             <Text style={[styles.chipTxt, !!categoria && styles.chipTxtOn]} numberOfLines={1}>{categoria || 'Categoria'}</Text>
             <Ionicons name="chevron-down" size={12} color={categoria ? '#FFFFFF' : colors.textoFraco} />
-          </TouchableOpacity>
+          </ChipBtn>
         )}
-        <TouchableOpacity onPress={() => setOrdem((o) => (o === 'recente' ? 'antiga' : 'recente'))}
-          style={[styles.chip, styles.chipOrdem]}>
+        <ChipBtn onPress={() => { setOrdem((o) => (o === 'recente' ? 'antiga' : 'recente')); bump(); }} extra={styles.chipOrdem}>
           <Ionicons name="swap-vertical" size={13} color={colors.marca} />
           <Text style={styles.chipTxt}>{ordem === 'recente' ? 'Recentes' : 'Antigas'}</Text>
-        </TouchableOpacity>
+        </ChipBtn>
       </View>
 
       <FlatList
+        key={tick}
         data={filtradas}
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: insets.bottom + 24, gap: 8 }}
@@ -196,7 +199,8 @@ export function PecasScreen() {
         {...scrollProps}
         ListHeaderComponent={spacerEl}
         ListEmptyComponent={<Text style={styles.vazio}>Nada por aqui.</Text>}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
+          <Aparece delay={Math.min(index, 8) * 30}>
             <Pressavel style={styles.linha} onPress={() => setEditar({ peca: item })}
               onLongPress={(x, y) => setMenu({ x, y, peca: item })}>
               {item.imagem_url ? (
@@ -243,6 +247,7 @@ export function PecasScreen() {
                 <View style={styles.linhaApagando}><LoadingDog size={22} color={colors.marca} /></View>
               )}
             </Pressavel>
+          </Aparece>
         )}
         initialNumToRender={10}
         maxToRenderPerBatch={8}
@@ -279,12 +284,12 @@ export function PecasScreen() {
           <Pressable style={styles.dropLista} onPress={() => {}}>
             <Text style={styles.dropTitulo}>Filtrar por categoria</Text>
             <ScrollView>
-              <TouchableOpacity style={styles.dropItem} onPress={() => { setCategoria(null); setDropAberto(false); }}>
+              <TouchableOpacity style={styles.dropItem} onPress={() => { setCategoria(null); setDropAberto(false); bump(); }}>
                 <Text style={[styles.dropItemTxt, !categoria && styles.dropItemTxtOn]}>Todas as categorias</Text>
                 {!categoria && <Ionicons name="checkmark" size={18} color={colors.marca} />}
               </TouchableOpacity>
               {categorias.map((cat) => (
-                <TouchableOpacity key={cat} style={styles.dropItem} onPress={() => { setCategoria(cat); setDropAberto(false); }}>
+                <TouchableOpacity key={cat} style={styles.dropItem} onPress={() => { setCategoria(cat); setDropAberto(false); bump(); }}>
                   <Text style={[styles.dropItemTxt, categoria === cat && styles.dropItemTxtOn]} numberOfLines={1}>{cat}</Text>
                   {categoria === cat && <Ionicons name="checkmark" size={18} color={colors.marca} />}
                 </TouchableOpacity>
@@ -294,6 +299,20 @@ export function PecasScreen() {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+function ChipBtn({ on, onPress, extra, children }:
+  { on?: boolean; onPress: () => void; extra?: object; children: React.ReactNode }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const anima = (to: number) =>
+    Animated.spring(scale, { toValue: to, useNativeDriver: true, friction: 6, tension: 140 }).start();
+  return (
+    <Pressable onPress={onPress} onPressIn={() => anima(0.9)} onPressOut={() => anima(1)}>
+      <Animated.View style={[styles.chip, on && styles.chipOn, extra, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
   );
 }
 
