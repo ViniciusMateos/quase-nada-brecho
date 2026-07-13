@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.2] — 2026-07-10
+
+### Adicionado
+- feat: Live Activity usa o bundle do build — o app manda o próprio bundle (`.dev` / `.preview`) junto com o push token e o server usa como tópico do APNs, então os dois builds convivem sem brigar pelo `APNS_BUNDLE_ID`
+
+### Notas
+- `APNS_BUNDLE_ID` do `.env` vira apenas **fallback** (app antigo que não manda bundle); só bundles com prefixo `app.quasenada.brecho` são aceitos
+- Sem mudança nativa: `runtimeVersion` segue em `1.0.0` e a correção foi entregue por **OTA** + deploy do backend
+
 ## [1.0.1] — 2026-07-10
 
 ### Adicionado
