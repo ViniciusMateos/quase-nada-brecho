@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import { env } from '@/config/env';
 import { aoReceberTokenLA, iniciarLiveActivity } from '../../modules/live-activity';
 
 /**
@@ -11,7 +12,9 @@ import { aoReceberTokenLA, iniciarLiveActivity } from '../../modules/live-activi
 export async function iniciarLAparaRun(runId: string, titulo: string): Promise<void> {
   try {
     const parar = aoReceberTokenLA((token) => {
-      api.setLiveActivity(runId, token).catch(() => { /* best-effort */ });
+      // manda o bundle deste build junto: o server usa como tópico do APNs, então
+      // dev (.dev) e preview (.preview) funcionam ao mesmo tempo, cada um no seu.
+      api.setLiveActivity(runId, token, env.bundleId).catch(() => { /* best-effort */ });
     });
     setTimeout(parar, 45000);   // para de escutar depois (o token já chegou muito antes)
     await iniciarLiveActivity(titulo, 0);   // total 0 = mostra "começando" até metrificar

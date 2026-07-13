@@ -61,7 +61,19 @@ def _token():
     return tok
 
 
-def _enviar(push_token, payload):
+_PREFIXO_OK = "app.quasenada.brecho"    # só aceita bundle nosso (dev/preview/prod)
+
+
+def bundle_valido(b):
+    """Bundle que o APP mandou junto com o token da LA. Cada build tem o seu
+    (`.dev`, `.preview`), e o tópico do APNs TEM que ser o do build que criou a
+    Live Activity — senão o push é rejeitado. Se não vier (app antigo) ou vier
+    coisa estranha, cai no APNS_BUNDLE_ID do .env."""
+    b = (b or "").strip()
+    return b if b.startswith(_PREFIXO_OK) else ""
+
+
+def _enviar(push_token, payload, bundle=None):
     """POST HTTP/2 pro APNs. Devolve (ok, detalhe). Bloqueante — chame via to_thread.
 
     Tenta o host preferido e, se vier `400 BadDeviceToken` (token do ambiente errado),
@@ -71,9 +83,10 @@ def _enviar(push_token, payload):
     if not tok or not push_token:
         return False, "sem credencial/token"
     import httpx  # httpx[http2]
+    topico = bundle_valido(bundle) or _BUNDLE
     headers = {
         "authorization": f"bearer {tok}",
-        "apns-topic": f"{_BUNDLE}.push-type.liveactivity",
+        "apns-topic": f"{topico}.push-type.liveactivity",
         "apns-push-type": "liveactivity",
         "apns-priority": "10",
     }
@@ -104,7 +117,7 @@ def _content_state(pct, done, total, label):
     return {"pct": int(pct), "done": int(done), "total": int(total), "label": label or ""}
 
 
-def atualizar(push_token, pct, done, total, label=""):
+def atualizar(push_token, pct, done, total, label="", bundle=None):
     payload = {"aps": {
         "timestamp": int(time.time()),
         "event": "update",
@@ -112,14 +125,14 @@ def atualizar(push_token, pct, done, total, label=""):
         "relevance-score": 100,
         "stale-date": int(time.time()) + 3600,
     }}
-    return _enviar(push_token, payload)
+    return _enviar(push_token, payload, bundle)
 
 
-def encerrar(push_token, pct=100, done=0, total=0, label="concluído"):
+def encerrar(push_token, pct=100, done=0, total=0, label="concluído", bundle=None):
     payload = {"aps": {
         "timestamp": int(time.time()),
         "event": "end",
         "content-state": _content_state(pct, done, total, label),
         "dismissal-date": int(time.time()) + 4,   # some do lock screen ~4s depois
     }}
-    return _enviar(push_token, payload)
+    return _enviar(push_token, payload, bundle)

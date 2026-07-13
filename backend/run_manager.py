@@ -86,6 +86,7 @@ class Run:
         self._ult_push_pct = -100      # throttle dos pushes de progresso
         self._ult_push_t = 0.0
         self.la_token = None           # push token da Live Activity (o app manda)
+        self.la_bundle = None          # bundle do BUILD que criou a LA (.dev/.preview) — vira o tópico do APNs
         self._ult_la_pct = -100        # throttle (leve) dos updates da Live Activity
         self._ult_la_t = 0.0
         self._ult_la_status = None      # última linha de status refletida na LA (fase de abertura)
@@ -235,7 +236,7 @@ class RunManager:
             try:
                 ok, det = await asyncio.to_thread(
                     liveactivity.atualizar, run.la_token, pct,
-                    p["done"], p["total"], p.get("label", ""))
+                    p["done"], p["total"], p.get("label", ""), run.la_bundle)
                 print(f"[la] update {run.id} {pct}% -> ok={ok} {det}", flush=True)
             except Exception as e:
                 print(f"[la] update {run.id} EXC {e}", flush=True)
@@ -273,7 +274,8 @@ class RunManager:
         run._ult_la_status_t = agora
         try:
             # total 0 = modo "começando" no widget → mostra só o label (sem barra/%)
-            ok, det = await asyncio.to_thread(liveactivity.atualizar, run.la_token, 0, 0, 0, txt[:40])
+            ok, det = await asyncio.to_thread(
+                liveactivity.atualizar, run.la_token, 0, 0, 0, txt[:40], run.la_bundle)
             print(f"[la] status {run.id} '{txt[:40]}' -> ok={ok} {det}", flush=True)
         except Exception:
             pass
@@ -288,7 +290,8 @@ class RunManager:
                 ok, det = await asyncio.to_thread(
                     liveactivity.encerrar, run.la_token, 100,
                     p.get("done", 0), p.get("total", 0),
-                    "concluído" if run.status == "finalizado" else run.status)
+                    "concluído" if run.status == "finalizado" else run.status,
+                    run.la_bundle)
                 print(f"[la] end {run.id} -> ok={ok} {det}", flush=True)
             except Exception as e:
                 print(f"[la] end {run.id} EXC {e}", flush=True)

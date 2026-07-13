@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 
-const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string; appVariant?: string };
+const extra = (Constants.expoConfig?.extra ?? {}) as
+  { apiBaseUrl?: string; appVariant?: string; bundleId?: string };
 
 // URL de produção (fixa) — o app já abre conectado sem precisar preencher nada.
 // Pode ser sobrescrita em Configurações dentro do app.
@@ -12,4 +13,7 @@ export const env = {
   // o usuário informa em Configurações.
   apiToken: process.env.EXPO_PUBLIC_API_TOKEN || '',
   appVariant: extra.appVariant ?? 'preview',
+  // bundle deste build (dev x preview) — vai junto com o token da Live Activity
+  // pro server empurrar o push no tópico certo do APNs.
+  bundleId: extra.bundleId ?? '',
 };

@@ -122,7 +122,8 @@ export const api = {
   getRunsHistorico: () => http.get<RunHistorico[]>('/runs/history'),
   getRun: (id: string) => http.get<RunDetail>(`/runs/${id}`),
   stopRun: (id: string) => http.post(`/runs/${id}/stop`),
-  setLiveActivity: (runId: string, token: string) => http.post(`/runs/${runId}/liveactivity`, { token }),
+  setLiveActivity: (runId: string, token: string, bundle?: string) =>
+    http.post(`/runs/${runId}/liveactivity`, { token, bundle }),
   importarPlanilha: () => http.post<ImportStats>('/scraper/importar'),
   connectInstagram: (cookies: IgCookie[]) => http.post<ConnectResult>('/instagram/session', { cookies }),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),

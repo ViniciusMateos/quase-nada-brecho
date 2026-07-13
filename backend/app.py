@@ -196,8 +196,11 @@ async def run_liveactivity(run_id: str, payload: dict):
     if not run:
         raise HTTPException(404, "run não encontrado")
     run.la_token = (payload.get("token") or "").strip() or None
+    # o app manda o bundle do PRÓPRIO build (.dev/.preview) — é ele que vira o tópico
+    # do APNs. Sem isso, dev e preview brigariam pelo APNS_BUNDLE_ID do .env.
+    run.la_bundle = liveactivity.bundle_valido(payload.get("bundle")) or None
     print(f"[la] token recebido p/ {run_id}: {'sim (' + str(len(run.la_token)) + ' chars)' if run.la_token else 'VAZIO'} "
-          f"| configurado={liveactivity.configurado()}", flush=True)
+          f"| bundle={run.la_bundle or '(do .env)'} | configurado={liveactivity.configurado()}", flush=True)
     return {"ok": True}
 
 

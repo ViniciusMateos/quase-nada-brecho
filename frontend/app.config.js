@@ -29,6 +29,9 @@ const current = variants[variant];
 const extra = {
   apiBaseUrl: process.env.EXPO_PUBLIC_API_URL || '',
   appVariant: variant,
+  // bundle deste build — o app manda junto com o token da Live Activity pro server
+  // usar como tópico do APNs (dev e preview têm bundles diferentes).
+  bundleId: current.bundleId,
 };
 extra.eas = { projectId: process.env.EAS_PROJECT_ID || 'a0c13d7d-b73a-42ad-8d28-e1907c6500c9' };
 
