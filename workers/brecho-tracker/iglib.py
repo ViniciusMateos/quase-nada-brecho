@@ -55,6 +55,27 @@ async (p) => {
 }
 """
 
+# lê a contagem de posts do topo do perfil, sem depender do web_profile_info (que o IG
+# às vezes quebra). 1º tenta o meta og:description ("… 342 Posts …"), 2º varre o header.
+# Devolve int ou null. Best-effort: HTML do IG muda, então isto é só pra % da barra.
+JS_POST_COUNT = r"""
+() => {
+  const parse = (s) => {
+    if (!s) return null;
+    const m = String(s).replace(/[.,](?=\d{3}(\D|$))/g, '')
+                       .match(/(\d+)\s*(posts|publica)/i);
+    return m ? parseInt(m[1], 10) : null;
+  };
+  const meta = document.querySelector('meta[property="og:description"]');
+  const n = parse(meta && meta.getAttribute('content'));
+  if (n) return n;
+  const cand = Array.from(document.querySelectorAll('header li, header span, header div, main span'))
+    .map(e => (e.textContent || '').trim())
+    .find(t => /(\d[\d.,]*)\s*(posts|publica)/i.test(t));
+  return parse(cand);
+}
+"""
+
 
 def _parse_json(text):
     if text.startswith("for (;;);"):
@@ -134,9 +155,25 @@ class IG:
         self.fechar()
 
     # ───────────────── navegação / sessão ─────────────────
-    def ir(self, url):
-        self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        self.page.wait_for_timeout(1500)
+    def ir(self, url, tentativas=3):
+        """Navega com retry. O IG às vezes ABORTA o carregamento (net::ERR_ABORTED) quando
+        a página logada dispara um redirect/rota client-side logo ao abrir — isso interrompe
+        a espera do 'domcontentloaded'. No retry a gente espera só o 'commit' (a resposta do
+        servidor chegou), que NÃO aborta com redirect, e deixa a página assentar no timeout."""
+        ultimo = None
+        for i in range(tentativas):
+            espera = "domcontentloaded" if i == 0 else "commit"
+            try:
+                self.page.goto(url, wait_until=espera, timeout=60000)
+                self.page.wait_for_timeout(1500)
+                return
+            except Exception as e:
+                ultimo = e
+                if i < tentativas - 1:
+                    log.warning("Navegação falhou (%d/%d, %s): %s — retry em 3s",
+                                i + 1, tentativas, espera, str(e)[:90])
+                    self.page.wait_for_timeout(3000)
+        raise ultimo
 
     def _cookies(self):
         try:
@@ -203,6 +240,19 @@ class IG:
         raise ultimo
 
     # ───────────────── operações de leitura ─────────────────
+    def posts_da_pagina(self):
+        """Contagem de posts lida do TOPO do perfil (og:description / header) — plano B
+        quando o web_profile_info do IG quebra. Best-effort: devolve int ou None e NUNCA
+        levanta. Serve só pra % da barra; se não achar, a raspagem segue sem o total."""
+        try:
+            n = self.page.evaluate(JS_POST_COUNT)
+            if isinstance(n, (int, float)) and n > 0:
+                log.info("Total de posts lido da página do perfil: %d", int(n))
+                return int(n)
+        except Exception as e:
+            log.warning("Não li o total de posts da página (%s) — sigo sem %%.", str(e)[:80])
+        return None
+
     def perfil_info(self, username):
         """user_id + contagem de posts do perfil."""
         url = (f"https://www.instagram.com/api/v1/users/web_profile_info/"
@@ -286,6 +336,21 @@ class IG:
         self.page.on("response", _on_response)
         try:
             self.ir(f"https://www.instagram.com/{username}/")
+            # espera o GRID do feed renderizar de verdade antes de scrollar. O goto pode ter
+            # resolvido cedo (redirect/commit) e deixar a página "meio montada"; scrollar assim
+            # NÃO dispara os próximos lotes e o feed "estabiliza" nos ~12 primeiros — uma
+            # raspagem incompleta que se disfarça de completa (o perigoso). Espera um link de
+            # post aparecer. Best-effort: se não vier, dá um tempo e segue mesmo assim.
+            try:
+                self.page.wait_for_selector('a[href*="/p/"], a[href*="/reel/"]', timeout=20000)
+                self.page.wait_for_timeout(800)    # deixa o grid assentar
+            except Exception:
+                log.warning("Grid do feed não apareceu a tempo — sigo mesmo assim.")
+                self.page.wait_for_timeout(3000)
+            # sem total pela API (web_profile_info bugado) → tenta ler da página aberta
+            # (best-effort; se não achar, segue sem %). Já estamos no perfil, sem nav extra.
+            if not total_alvo:
+                total_alvo = self.posts_da_pagina()
             estavel = ult = 0
             for i in range(max_scrolls):
                 self.page.mouse.wheel(0, random.randint(3000, 6000))

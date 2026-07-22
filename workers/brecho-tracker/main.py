@@ -74,16 +74,27 @@ def raspar(ig, boundary):
     própria página dispara (iglib.raspar_perfil_scroll). O IG serve o scroll natural
     sem estrangular, então uma run pega o feed inteiro — sem rate-limit, sem resume,
     sem grinder. O boundary só corta as peças mais antigas que já estão 100% vendidas."""
-    info = ig.perfil_info(config.BRECHO_USERNAME)
-    log.info("Perfil @%s — id=%s — %s posts — privado=%s",
-             info["username"], info["user_id"], info["posts"], info["is_private"])
+    # web_profile_info é só pra logar e pegar o total de posts (a barra de progresso).
+    # Às vezes o IG devolve 400 por bug DELE (ex: a categoria de negócio do perfil
+    # aponta pra um asset/subvertical que o IG deletou da taxonomia) — isso NÃO impede
+    # a raspagem, que vai por SCROLL do @username. Então tolera a falha e segue sem o
+    # total (a barra só não sabe a % até o fim).
+    total_alvo = None
+    try:
+        info = ig.perfil_info(config.BRECHO_USERNAME)
+        total_alvo = info.get("posts")
+        log.info("Perfil @%s — id=%s — %s posts — privado=%s",
+                 info["username"], info["user_id"], info["posts"], info["is_private"])
+    except Exception as e:
+        log.warning("perfil_info falhou (%s) — sigo pela raspagem por scroll, sem o total.",
+                    str(e)[:140])
 
     if boundary:
         log.info("Boundary ativo: descarto peças anteriores ao drop %s (já vendidas).", boundary)
     else:
         log.info("Sem boundary (--full): raspando o feed inteiro.")
 
-    itens = ig.raspar_perfil_scroll(config.BRECHO_USERNAME, total_alvo=info.get("posts"))
+    itens = ig.raspar_perfil_scroll(config.BRECHO_USERNAME, total_alvo=total_alvo)
     itens.sort(key=lambda x: x.get("taken_at") or 0, reverse=True)   # novo→antigo
 
     pecas, promo, cortadas = [], 0, 0
