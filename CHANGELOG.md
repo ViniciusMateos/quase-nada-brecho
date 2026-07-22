@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.3] — 2026-07-22
+
+### Corrigido
+- fix: scraper resiliente aos perrengues do Instagram — 4 camadas no início da raspagem pra o worker não morrer com a instabilidade/bugs do IG:
+  - tolera o `web_profile_info` dando 400 (bug de categoria de negócio do IG) e segue pela raspagem por scroll
+  - lê o total de posts do topo do perfil (og:description/header) quando a API falha — recupera a % da barra
+  - navegação com retry (fallback pra `wait_until="commit"` quando o IG aborta o carregamento com `ERR_ABORTED`)
+  - espera o grid do feed renderizar antes de scrollar, evitando parar nos ~12 primeiros posts numa página crua
+
+### Notas
+- Mudança só no worker (deploy por `scp` no servidor); o app/OTA não muda, `runtimeVersion` segue em `1.0.0`
+
 ## [1.0.2] — 2026-07-10
 
 ### Adicionado

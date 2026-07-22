@@ -27,7 +27,7 @@ import settings
 from db import init_db
 from run_manager import RunManager
 
-app = FastAPI(title="Quase Nada Brechó — API", version="1.0.2")
+app = FastAPI(title="Quase Nada Brechó — API", version="1.0.3")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )

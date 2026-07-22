@@ -39,7 +39,7 @@ module.exports = {
   expo: {
     name: current.name,
     slug: 'quase-nada-brecho',
-    version: '1.0.2',
+    version: '1.0.3',
     // fixo (não segue a versão): mantém o OTA compatível com os builds já instalados;
     // só sobe quando uma mudança NATIVA quebra a compatibilidade com o bundle JS.
     runtimeVersion: '1.0.0',
