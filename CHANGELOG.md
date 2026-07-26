@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4] — 2026-07-26
+
+### Corrigido
+- fix: **parar** um bot pelo app agora é **Ctrl+C** (SIGINT) — mostra o saldo e sai limpo, sem virar erro
+
+### Manutenção
+- chore: script do 2º túnel SSH (`:1081`) pro dm-followers (proxy residencial dedicado)
+
 ## [1.0.3] — 2026-07-22
 
 ### Corrigido
