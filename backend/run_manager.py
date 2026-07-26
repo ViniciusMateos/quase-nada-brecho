@@ -8,6 +8,7 @@ gerada pro SQLite — o dashboard passa a refletir as vendas reais.
 import asyncio
 import itertools
 import os
+import signal
 import time
 from collections import deque
 
@@ -312,11 +313,31 @@ class RunManager:
             return False
         if run.proc.returncode is None:
             run.status = "parado"
+            self._parar_gracioso(run.proc)
+        return True
+
+    def _parar_gracioso(self, proc):
+        """Manda SIGINT (= Ctrl+C) pro worker cair no `except KeyboardInterrupt` e sair LIMPO
+        ('Interrompido' + fecha o browser no finally do playwright), em vez de SIGTERM que
+        virava erro. Só escala pra SIGTERM e depois SIGKILL se ele teimar em não sair."""
+        def _sinal(sig):
             try:
-                run.proc.terminate()
+                proc.send_signal(sig)
             except Exception:
                 pass
-        return True
+        _sinal(signal.SIGINT)                     # Ctrl+C — saída limpa
+
+        async def _escalar():
+            await asyncio.sleep(10)                # tempo do KeyboardInterrupt rodar + fechar browser
+            if proc.returncode is None:
+                _sinal(signal.SIGTERM)
+                await asyncio.sleep(6)
+                if proc.returncode is None:
+                    try:
+                        proc.kill()               # chromium travado: mata na marra
+                    except Exception:
+                        pass
+        asyncio.create_task(_escalar())
 
     def listar(self):
         return [r.info() for r in self.runs.values()]
