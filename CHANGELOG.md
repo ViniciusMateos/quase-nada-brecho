@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.5] — 2026-07-26
+
+### Corrigido
+- fix: ajustes na tela de drops
+  - no seletor de drop da peça, drops já **publicados** não aparecem (mantém o que a peça já está)
+  - "adicionar peças" ao drop lista só peças manuais **disponíveis** (vendida não entra em drop novo)
+  - salvar drop volta pra lista de drops
+
+### Manutenção
+- chore: alinha `package.json` e `backend/app.py` na versão (tinham ficado em 1.0.3 no bump parcial do 1.0.4)
+
 ## [1.0.4] — 2026-07-26
 
 ### Corrigido
