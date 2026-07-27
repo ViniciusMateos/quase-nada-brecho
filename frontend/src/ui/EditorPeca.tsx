@@ -375,7 +375,8 @@ export function EditorPeca({
                   style={[styles.dropChip, form.drop_id == null && styles.dropChipOn]}>
                   <Text style={[styles.dropChipTxt, form.drop_id == null && styles.dropChipTxtOn]}>Nenhum</Text>
                 </TouchableOpacity>
-                {drops.filter((d) => d.tipo === 'manual').map((d) => (
+                {drops.filter((d) => d.tipo === 'manual'
+                  && (d.status !== 'publicado' || d.id === form.drop_id)).map((d) => (
                   <TouchableOpacity key={d.id} onPress={() => setForm({ ...form, drop_id: d.id })}
                     style={[styles.dropChip, form.drop_id === d.id && styles.dropChipOn]}>
                     <Text style={[styles.dropChipTxt, form.drop_id === d.id && styles.dropChipTxtOn]}>Drop {d.numero}</Text>

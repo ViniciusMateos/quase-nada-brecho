@@ -70,9 +70,8 @@ export function DropDetailScreen() {
   async function salvar() {
     setSalvando(true);
     try {
-      const d = await api.editDrop(params.dropId, { nome: nome.trim() || 'Drop', data: data.trim() || null, status });
-      setDrop(d);
-      // o header é "Drop N" (param da rota) — não sobrescrever com o nome cru ("rascunho")
+      await api.editDrop(params.dropId, { nome: nome.trim() || 'Drop', data: data.trim() || null, status });
+      nav.goBack();   // salvou → volta pra lista de drops
     } catch {
       Alert.alert('Ops', 'Não consegui salvar o drop.');
     } finally {
@@ -115,8 +114,9 @@ export function DropDetailScreen() {
 
   if (!drop) return <TelaCarregando />;
 
-  // só peças do catálogo manual podem entrar num drop — as do scraper já têm o drop delas
-  const foraDoDrop = todas.filter((p) => p.drop_id !== params.dropId && p.origem === 'manual');
+  // só peças do catálogo manual, DISPONÍVEIS (não vendidas), fora deste drop — as do
+  // scraper já têm o drop delas, e vendida não entra em drop novo
+  const foraDoDrop = todas.filter((p) => p.drop_id !== params.dropId && p.origem === 'manual' && !p.vendida);
   const totalVenda = drop.pecas.reduce((s, p) => s + p.venda, 0);
 
   return (
