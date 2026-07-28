@@ -95,6 +95,13 @@ def raspar(ig, boundary):
         log.info("Sem boundary (--full): raspando o feed inteiro.")
 
     itens = ig.raspar_perfil_scroll(config.BRECHO_USERNAME, total_alvo=total_alvo)
+    if not itens:
+        # 0 posts vistos num perfil que TEM posts = o feed não carregou (grid não renderizou,
+        # sessão degradada, ou o IG mudou o endpoint). NÃO é "nada a atualizar" — é raspagem
+        # falha. Levanta pra virar ERRO visível em vez de "finalizado" mentindo sucesso.
+        raise RuntimeError(
+            "O feed do perfil não carregou (0 posts vistos) — raspagem incompleta, abortando. "
+            "Rode de novo; se persistir, reconecte o Instagram (a sessão pode ter expirado).")
     itens.sort(key=lambda x: x.get("taken_at") or 0, reverse=True)   # novo→antigo
 
     pecas, promo, cortadas = [], 0, 0

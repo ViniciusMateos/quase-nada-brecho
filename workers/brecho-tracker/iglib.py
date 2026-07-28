@@ -326,7 +326,12 @@ class IG:
 
         def _on_response(resp):
             u = resp.url
-            if "instagram.com" not in u or "graphql" not in u:
+            if "instagram.com" not in u:
+                return
+            # o feed do perfil vinha por graphql, mas o IG troca o endpoint sem avisar —
+            # colhe também das rotas de feed/api v1. _colher só pega nós com cara de post,
+            # então parsear a mais é inofensivo (dedup por code cuida do resto).
+            if not any(k in u for k in ("graphql", "/api/v1/feed", "/api/v1/users", "/api/v1/clips")):
                 return
             try:
                 _colher(resp.json())
