@@ -10,12 +10,16 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, DropResumo, Peca } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 import { Aparece, Pressavel } from '@/ui/components';
 import { EditorPeca } from '@/ui/EditorPeca';
 import { MenuContexto } from '@/ui/MenuContexto';
 import { LoadingDog, TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
+import { useI18n } from '@/i18n';
+import { traduzCategoria } from '@/i18n/categorias';
+import { TextoScramble } from '@/ui/TextoScramble';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -39,6 +43,9 @@ function pctStr(recebe: number, venda: number): string {
 }
 
 export function PecasScreen() {
+  const { colors } = useTheme();
+  const { t, lang } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const nav = useNavigation<Nav>();
   const route = useRoute<RouteProp<RootStackParamList, 'Pecas'>>();
@@ -83,10 +90,10 @@ export function PecasScreen() {
 
   function excluirPeca(peca: Peca) {
     setMenu(null);
-    Alert.alert('Excluir peça', `Some com "${peca.nome || peca.item || `Peça ${peca.id}`}" de vez. Confirma?`, [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('pecas.deleteTitle'), t('pecas.deleteMsg', { nome: peca.nome || peca.item || `#${peca.id}` }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Excluir', style: 'destructive',
+        text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           setApagandoPeca(peca.id);
           try { await api.delPeca(peca.id); await carregar(); } catch {}
@@ -99,7 +106,7 @@ export function PecasScreen() {
   // Escolhe várias fotos e manda pro carrossel de nomear (estilo Insta).
   async function importarVarias() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Ops', 'Preciso da permissão pra acessar as fotos.'); return; }
+    if (!perm.granted) { Alert.alert(t('common.oops'), t('pecas.needPhotoPerm')); return; }
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.6, selectionLimit: 0,
     });
@@ -122,10 +129,12 @@ export function PecasScreen() {
   // URL absoluta (Insta) passa direto; caminho relativo (/uploads) recebe o host
   const img = (u: string | null) => (u ? { uri: /^https?:/.test(u) ? u : `${base}${u}` } : undefined);
 
+  // ordena pela categoria JÁ TRADUZIDA — assim a lista fica alfabética no idioma ativo
+  // (em EN reordena por "pants/sneakers/t-shirt…", não pela ordem do português)
   const categorias = useMemo(
     () => Array.from(new Set((pecas ?? []).map((p) => (p.item ?? '').trim()).filter(Boolean)))
-      .sort((a, b) => a.localeCompare(b)),
-    [pecas],
+      .sort((a, b) => traduzCategoria(a, lang).localeCompare(traduzCategoria(b, lang))),
+    [pecas, lang],
   );
 
   const filtradas = useMemo(() => {
@@ -158,7 +167,7 @@ export function PecasScreen() {
       <View style={styles.topo}>
         <View style={styles.buscaBox}>
           <Ionicons name="search" size={16} color={colors.textoFraco} />
-          <TextInput value={busca} onChangeText={setBusca} placeholder="Buscar peça…"
+          <TextInput value={busca} onChangeText={setBusca} placeholder={t('pecas.search')}
             placeholderTextColor={colors.textoFraco} style={styles.buscaInput} />
         </View>
         <TouchableOpacity style={styles.bulkBtn} onPress={importarVarias}>
@@ -172,21 +181,23 @@ export function PecasScreen() {
         {(['todas', 'disponiveis', 'vendidas', 'sem-drop'] as Filtro[]).map((f) => (
           <ChipBtn key={f} on={filtro === f} onPress={() => { setFiltro(f); bump(); }}>
             <Text style={[styles.chipTxt, filtro === f && styles.chipTxtOn]}>
-              {f === 'todas' ? `Todas (${pecas.length})` : f === 'disponiveis' ? 'Disponíveis'
-                : f === 'vendidas' ? 'Vendidas' : 'Sem drop'}
+              {f === 'todas' ? t('pecas.all', { n: pecas.length }) : f === 'disponiveis' ? t('pecas.available')
+                : f === 'vendidas' ? t('pecas.sold') : t('pecas.noDrop')}
             </Text>
           </ChipBtn>
         ))}
         {categorias.length > 0 && (
           <ChipBtn on={!!categoria} onPress={() => setDropAberto(true)} extra={styles.chipDrop}>
             <Ionicons name="pricetag-outline" size={12} color={categoria ? '#FFFFFF' : colors.marca} />
-            <Text style={[styles.chipTxt, !!categoria && styles.chipTxtOn]} numberOfLines={1}>{categoria || 'Categoria'}</Text>
+            <TextoScramble ativo={lang === 'en'} numberOfLines={1}
+              style={[styles.chipTxt, !!categoria && styles.chipTxtOn]}
+              text={categoria ? traduzCategoria(categoria, lang) : t('pecas.category')} />
             <Ionicons name="chevron-down" size={12} color={categoria ? '#FFFFFF' : colors.textoFraco} />
           </ChipBtn>
         )}
         <ChipBtn onPress={() => { setOrdem((o) => (o === 'recente' ? 'antiga' : 'recente')); bump(); }} extra={styles.chipOrdem}>
           <Ionicons name="swap-vertical" size={13} color={colors.marca} />
-          <Text style={styles.chipTxt}>{ordem === 'recente' ? 'Recentes' : 'Antigas'}</Text>
+          <Text style={styles.chipTxt}>{ordem === 'recente' ? t('pecas.recent') : t('pecas.old')}</Text>
         </ChipBtn>
       </View>
 
@@ -198,7 +209,7 @@ export function PecasScreen() {
         showsVerticalScrollIndicator={false}
         {...scrollProps}
         ListHeaderComponent={spacerEl}
-        ListEmptyComponent={<Text style={styles.vazio}>Nada por aqui.</Text>}
+        ListEmptyComponent={<Text style={styles.vazio}>{t('pecas.empty')}</Text>}
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 8) * 30}>
             <Pressavel style={styles.linha} onPress={() => setEditar({ peca: item })}
@@ -217,20 +228,22 @@ export function PecasScreen() {
                   {item.consignado && (
                     <View style={styles.consigTag}>
                       <Ionicons name="people" size={9} color="#FFFFFF" />
-                      <Text style={styles.consigTagTxt}>consig</Text>
+                      <Text style={styles.consigTagTxt}>{t('pecas.consig')}</Text>
                     </View>
                   )}
                 </View>
                 <Text style={styles.sub} numberOfLines={1}>
-                  {[item.item, item.tamanho && `tam ${item.tamanho}`, rotuloDrop(item.drop_id, item.postado_em)].filter(Boolean).join(' · ') || '—'}
+                  {[traduzCategoria(item.item, lang), item.tamanho && t('pecas.size', { t: item.tamanho }), rotuloDrop(item.drop_id, item.postado_em)].filter(Boolean).join(' · ') || '—'}
                 </Text>
               </View>
               <View style={styles.valores}>
                 <Text style={styles.venda}>{brl(item.venda)}</Text>
                 {item.consignado ? (
-                  <Text style={styles.recebe}>recebe {brl(recebeConsig(item))} {item.consig_tipo === 'valor' ? `(fixo · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}</Text>
+                  <Text style={styles.recebe}>{item.consig_tipo === 'valor'
+                    ? t('pecas.receiveFixed', { v: brl(recebeConsig(item)), p: pctStr(recebeConsig(item), item.venda) })
+                    : t('pecas.receivePct', { v: brl(recebeConsig(item)), p: item.consig_pct || 0 })}</Text>
                 ) : (
-                  <Text style={styles.compra}>compra {brl(item.compra)}</Text>
+                  <Text style={styles.compra}>{t('pecas.buy', { v: brl(item.compra) })}</Text>
                 )}
               </View>
               {/* verde=vendida · laranja=postada(Insta) disponível · laranja escuro=em drop futuro · cinza=avulsa */}
@@ -263,10 +276,10 @@ export function PecasScreen() {
         visible={!!menu} x={menu?.x ?? 0} y={menu?.y ?? 0} onClose={() => setMenu(null)}
         itens={menu ? [
           ...(dropDaPeca(menu.peca.drop_id, menu.peca.postado_em)
-            ? [{ label: 'Ver no drop', icon: 'albums-outline' as const, onPress: () => irPraDrop(menu.peca.drop_id, menu.peca.postado_em) }]
+            ? [{ label: t('common.viewInDrop'), icon: 'albums-outline' as const, onPress: () => irPraDrop(menu.peca.drop_id, menu.peca.postado_em) }]
             : []),
-          { label: 'Editar', icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setTimeout(() => setEditar({ peca: p }), 180); } },
-          { label: 'Excluir', icon: 'trash-outline', cor: colors.erro, onPress: () => excluirPeca(menu.peca) },
+          { label: t('common.edit'), icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setTimeout(() => setEditar({ peca: p }), 180); } },
+          { label: t('common.delete'), icon: 'trash-outline', cor: colors.erro, onPress: () => excluirPeca(menu.peca) },
         ] : []}
       />
 
@@ -274,7 +287,7 @@ export function PecasScreen() {
         <View style={styles.recarregandoOverlay} pointerEvents="none">
           <View style={styles.recarregandoCard}>
             <LoadingDog size={44} />
-            <Text style={styles.recarregandoTxt}>Atualizando…</Text>
+            <Text style={styles.recarregandoTxt}>{t('pecas.updating')}</Text>
           </View>
         </View>
       )}
@@ -282,15 +295,17 @@ export function PecasScreen() {
       <Modal visible={dropAberto} transparent animationType="fade" onRequestClose={() => setDropAberto(false)}>
         <Pressable style={styles.dropFundo} onPress={() => setDropAberto(false)}>
           <Pressable style={styles.dropLista} onPress={() => {}}>
-            <Text style={styles.dropTitulo}>Filtrar por categoria</Text>
+            <Text style={styles.dropTitulo}>{t('pecas.filterByCategory')}</Text>
             <ScrollView>
               <TouchableOpacity style={styles.dropItem} onPress={() => { setCategoria(null); setDropAberto(false); bump(); }}>
-                <Text style={[styles.dropItemTxt, !categoria && styles.dropItemTxtOn]}>Todas as categorias</Text>
+                <Text style={[styles.dropItemTxt, !categoria && styles.dropItemTxtOn]}>{t('pecas.allCategories')}</Text>
                 {!categoria && <Ionicons name="checkmark" size={18} color={colors.marca} />}
               </TouchableOpacity>
               {categorias.map((cat) => (
                 <TouchableOpacity key={cat} style={styles.dropItem} onPress={() => { setCategoria(cat); setDropAberto(false); bump(); }}>
-                  <Text style={[styles.dropItemTxt, categoria === cat && styles.dropItemTxtOn]} numberOfLines={1}>{cat}</Text>
+                  <TextoScramble ativo={lang === 'en'} numberOfLines={1}
+                    style={[styles.dropItemTxt, categoria === cat && styles.dropItemTxtOn]}
+                    text={traduzCategoria(cat, lang)} />
                   {categoria === cat && <Ionicons name="checkmark" size={18} color={colors.marca} />}
                 </TouchableOpacity>
               ))}
@@ -304,6 +319,8 @@ export function PecasScreen() {
 
 function ChipBtn({ on, onPress, extra, children }:
   { on?: boolean; onPress: () => void; extra?: object; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const scale = useRef(new Animated.Value(1)).current;
   const anima = (to: number) =>
     Animated.spring(scale, { toValue: to, useNativeDriver: true, friction: 6, tension: 140 }).start();
@@ -316,7 +333,7 @@ function ChipBtn({ on, onPress, extra, children }:
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   topo: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 12 },
   buscaBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.card2, borderRadius: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },

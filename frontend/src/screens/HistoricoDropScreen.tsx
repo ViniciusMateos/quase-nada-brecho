@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -6,7 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Peca } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
 import { Aparece, Card, Pressavel } from '@/ui/components';
 import { EditorPeca } from '@/ui/EditorPeca';
 import { TelaCarregando } from '@/ui/LoadingDog';
@@ -31,6 +33,9 @@ function pctStr(recebe: number, venda: number): string {
 }
 
 export function HistoricoDropScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { params } = useRoute<R>();
   const [pecas, setPecas] = useState<Peca[] | null>(null);
@@ -61,14 +66,14 @@ export function HistoricoDropScreen() {
         contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: insets.bottom + 24 }}
         ListHeaderComponent={
           <Card style={{ gap: 4, marginBottom: 6 }}>
-            <Text style={styles.data}>postado {fmtData(params.data)}</Text>
-            <Linha label="Peças" valor={`${vend.length}/${pecas.length} vendidas`} />
-            <Linha label="Faturamento" valor={brl(faturamento)} cor={colors.ok} />
+            <Text style={styles.data}>{t('drops.postedOn', { d: fmtData(params.data) })}</Text>
+            <Linha label={t('drops.pieces')} valor={t('drops.soldCount', { sold: vend.length, total: pecas.length })} />
+            <Linha label={t('drops.revenue')} valor={brl(faturamento)} cor={colors.ok} />
             {disponiveis > 0 && (
-              <Linha label="Projeção (se vender tudo)" valor={brl(projecao)} cor={colors.marca} />
+              <Linha label={t('drops.projection')} valor={brl(projecao)} cor={colors.marca} />
             )}
-            <Linha label="Gasto do drop" valor={brl(gasto)} cor={colors.textoFraco} />
-            <Linha label="Lucro líquido" valor={brl(faturamento - cmv)} cor={colors.marca} forte />
+            <Linha label={t('drops.spent')} valor={brl(gasto)} cor={colors.textoFraco} />
+            <Linha label={t('drops.profit')} valor={brl(faturamento - cmv)} cor={colors.marca} forte />
           </Card>
         }
         renderItem={({ item, index }) => (
@@ -87,20 +92,20 @@ export function HistoricoDropScreen() {
                   {item.consignado && (
                     <View style={styles.consigTag}>
                       <Ionicons name="people" size={9} color="#FFFFFF" />
-                      <Text style={styles.consigTagTxt}>consig</Text>
+                      <Text style={styles.consigTagTxt}>{t('drops.consig')}</Text>
                     </View>
                   )}
                 </View>
                 {item.consignado && (
                   <Text style={styles.recebe}>
-                    recebe {brl(recebeConsig(item))} {item.consig_tipo === 'valor' ? `(fixo · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}
+                    {t('drops.receives', { v: brl(recebeConsig(item)) })} {item.consig_tipo === 'valor' ? `(${t('drops.fixed')} · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}
                   </Text>
                 )}
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.venda}>{brl(item.venda)}</Text>
                 <Text style={[styles.tag, { color: item.vendida ? colors.ok : colors.textoFraco }]}>
-                  {item.vendida ? 'vendida' : 'disponível'}
+                  {item.vendida ? t('drops.sold') : t('drops.available')}
                 </Text>
               </View>
             </Pressavel>
@@ -113,6 +118,8 @@ export function HistoricoDropScreen() {
 }
 
 function Linha({ label, valor, cor, forte }: { label: string; valor: string; cor?: string; forte?: boolean }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.linha}>
       <Text style={styles.linhaLabel}>{label}</Text>
@@ -121,7 +128,7 @@ function Linha({ label, valor, cor, forte }: { label: string; valor: string; cor
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   data: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
   linha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

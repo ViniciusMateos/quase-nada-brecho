@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, StyleProp, View, ViewStyle } from 'react-native';
-import { colors } from '@/theme';
+import { useTheme } from '@/theme-context';
 
 /**
  * Loader oficial do Quase Nada: o cachorro da marca + anel girando em volta.
  * Usado em TODOS os loadings do app (botões, telas, etc). Tinge na cor passada.
  */
 export function LoadingDog({
-  size = 56, color = colors.marca, style,
+  size = 56, color: colorProp, style,
 }: { size?: number; color?: string; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  const color = colorProp ?? colors.marca;
   const rotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -47,6 +49,7 @@ export function LoadingDog({
 
 // Loader de tela cheia (carregamento inicial de telas)
 export function TelaCarregando() {
+  const { colors } = useTheme();
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
       <LoadingDog size={64} />

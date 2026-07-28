@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View } from 'react-native';
-import { DarkTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { colors } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
 import { BarraScraperGlobal } from '@/ui/BarraScraperGlobal';
 import { interacaoBus } from '@/ui/interacaoBus';
 import { HubScreen } from '@/screens/HubScreen';
@@ -36,16 +37,22 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-const navTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: colors.bg, card: colors.card, text: colors.texto,
-    primary: colors.marca, border: colors.border,
-  },
-};
-
 export function RootNavigator() {
+  const { colors, isDark } = useTheme();
+  const { t } = useI18n();
+
+  const navTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        background: colors.bg, card: colors.card, text: colors.texto,
+        primary: colors.marca, border: colors.border,
+      },
+    };
+  }, [colors, isDark]);
+
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme}>
       {/* captura (sem roubar) qualquer toque/scroll nas telas → avisa a barra flutuante
@@ -60,19 +67,19 @@ export function RootNavigator() {
           contentStyle: { backgroundColor: colors.bg },
         }}>
         <Stack.Screen name="Hub" component={HubScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Pecas" component={PecasScreen} options={{ title: 'Peças' }} />
+        <Stack.Screen name="Pecas" component={PecasScreen} options={{ title: t('nav.pecas') }} />
         <Stack.Screen name="CarrosselPecas" component={CarrosselPecasScreen} options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
-        <Stack.Screen name="Drops" component={DropsScreen} options={{ title: 'Drops' }} />
+        <Stack.Screen name="Drops" component={DropsScreen} options={{ title: t('nav.drops') }} />
         <Stack.Screen name="DropDetail" component={DropDetailScreen}
           options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="HistoricoDrop" component={HistoricoDropScreen}
           options={({ route }) => ({ title: route.params.titulo })} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
-        <Stack.Screen name="Sincronizar" component={SincronizarScreen} options={{ title: 'Sincronizar brechó' }} />
+        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('nav.dashboard') }} />
+        <Stack.Screen name="Sincronizar" component={SincronizarScreen} options={{ title: t('nav.sync') }} />
         <Stack.Screen name="Run" component={RunScreen} options={({ route }) => ({ title: route.params.nome })} />
-        <Stack.Screen name="Historico" component={HistoricoScreen} options={{ title: 'Histórico' }} />
-        <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen} options={{ title: 'Conectar Instagram' }} />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Configurações' }} />
+        <Stack.Screen name="Historico" component={HistoricoScreen} options={{ title: t('nav.history') }} />
+        <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen} options={{ title: t('nav.instagram') }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
       </Stack.Navigator>
       </View>
       <BarraScraperGlobal onAbrir={(runId) => {

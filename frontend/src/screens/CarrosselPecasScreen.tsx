@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, Animated, Dimensions, FlatList, KeyboardAvoidingView, NativeScrollEvent,
   NativeSyntheticEvent, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -10,7 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '@/lib/api';
 import { fotoParaUpload } from '@/lib/foto';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
 import { Botao } from '@/ui/components';
 import { LoadingDog } from '@/ui/LoadingDog';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -18,6 +20,9 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type R = RouteProp<RootStackParamList, 'CarrosselPecas'>;
 
 export function CarrosselPecasScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
   const { fotos: fotosIniciais } = useRoute<R>().params;
@@ -54,7 +59,7 @@ export function CarrosselPecasScreen() {
 
   async function trocarFoto(i: number) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Ops', 'Preciso da permissão pra acessar as fotos.'); return; }
+    if (!perm.granted) { Alert.alert(t('common.oops'), t('pecas.needPhotoPerm')); return; }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
     if (!res.canceled && res.assets[0]) {
       const uri = res.assets[0].uri;
@@ -63,10 +68,10 @@ export function CarrosselPecasScreen() {
   }
 
   function removerFoto(i: number) {
-    Alert.alert('Tirar da lista?', 'Essa foto não vai ser importada. Confirma?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('carrossel.removeTitle'), t('carrossel.removeMsg'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Tirar', style: 'destructive', onPress: () => {
+        text: t('carrossel.remove'), style: 'destructive', onPress: () => {
           if (fotos.length <= 1) { nav.goBack(); return; }
           const novoIdx = Math.min(i, fotos.length - 2);
           setFotos((arr) => arr.filter((_, j) => j !== i));
@@ -91,25 +96,24 @@ export function CarrosselPecasScreen() {
       setProgresso({ feitas: i + 1, total: fotos.length });
     }
     setProgresso(null);
-    const comNome = nomes.filter((n) => n.trim()).length;
-    Alert.alert('Pronto!', `${ok} peça${ok === 1 ? '' : 's'} adicionada${ok === 1 ? '' : 's'}${comNome ? `, ${comNome} com nome` : ''}. Preço e detalhes é só tocar em cada uma.`, [
-      { text: 'Beleza', onPress: () => nav.goBack() },
+    Alert.alert(t('carrossel.doneTitle'), t('carrossel.doneMsg', { ok }), [
+      { text: t('carrossel.ok'), onPress: () => nav.goBack() },
     ]);
   }
 
   function pular() {
-    Alert.alert('Pular nomes?', 'Adiciona as peças só com a foto (você nomeia depois). Confirma?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Pular e adicionar', onPress: finalizar },
+    Alert.alert(t('carrossel.skipTitle'), t('carrossel.skipMsg'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('carrossel.skipConfirm'), onPress: finalizar },
     ]);
   }
 
   // X (fechar): confirma antes de perder o que já nomeou. A animação de saída é a
   // do próprio modal (slide pra baixo) quando dá goBack.
   function confirmarDescartar() {
-    Alert.alert('Descartar peças?', `Você perde as ${fotos.length} foto${fotos.length === 1 ? '' : 's'} que está nomeando. Confirma?`, [
-      { text: 'Continuar nomeando', style: 'cancel' },
-      { text: 'Descartar', style: 'destructive', onPress: () => nav.goBack() },
+    Alert.alert(t('carrossel.discardTitle'), t('carrossel.discardMsg', { n: fotos.length }), [
+      { text: t('carrossel.keepNaming'), style: 'cancel' },
+      { text: t('carrossel.discard'), style: 'destructive', onPress: () => nav.goBack() },
     ]);
   }
 
@@ -125,9 +129,9 @@ export function CarrosselPecasScreen() {
         <TouchableOpacity onPress={confirmarDescartar} hitSlop={8}>
           <Ionicons name="close" size={24} color={colors.textoFraco} />
         </TouchableOpacity>
-        <Text style={styles.titulo}>Nomear peças</Text>
+        <Text style={styles.titulo}>{t('carrossel.title')}</Text>
         <TouchableOpacity onPress={pular} hitSlop={8}>
-          <Text style={styles.pular}>Pular</Text>
+          <Text style={styles.pular}>{t('carrossel.skip')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -168,10 +172,10 @@ export function CarrosselPecasScreen() {
       </View>
 
       <View style={[styles.rodape, { paddingBottom: insets.bottom + 12 }]}>
-        <Text style={styles.contador}>Peça {idx + 1} de {fotos.length}</Text>
+        <Text style={styles.contador}>{t('carrossel.counter', { i: idx + 1, n: fotos.length })}</Text>
         <TextInput
           value={nomes[idx]} onChangeText={setNome}
-          placeholder="Nome da peça (opcional)" placeholderTextColor={colors.textoFraco}
+          placeholder={t('carrossel.namePlaceholder')} placeholderTextColor={colors.textoFraco}
           style={styles.input} returnKeyType={ultimo ? 'done' : 'next'} blurOnSubmit={ultimo}
           onSubmitEditing={() => { if (ultimo) finalizar(); else irPara(idx + 1); }} />
         <View style={styles.botoes}>
@@ -182,8 +186,8 @@ export function CarrosselPecasScreen() {
           </Animated.View>
           <View style={{ flex: 1 }}>
             {ultimo
-              ? <Botao title={`Adicionar ${fotos.length} peça${fotos.length === 1 ? '' : 's'}`} onPress={finalizar} loading={!!progresso} />
-              : <Botao title="Próxima" onPress={() => irPara(idx + 1)} />}
+              ? <Botao title={t('carrossel.addN', { n: fotos.length })} onPress={finalizar} loading={!!progresso} />
+              : <Botao title={t('carrossel.next')} onPress={() => irPara(idx + 1)} />}
           </View>
         </View>
       </View>
@@ -193,7 +197,7 @@ export function CarrosselPecasScreen() {
         <View style={styles.overlay}>
           <View style={styles.overlayCard}>
             <LoadingDog size={56} />
-            <Text style={styles.overlayTxt}>Adicionando… {progresso.feitas}/{progresso.total}</Text>
+            <Text style={styles.overlayTxt}>{t('carrossel.adding', { f: progresso.feitas, n: progresso.total })}</Text>
           </View>
         </View>
       )}
@@ -201,7 +205,7 @@ export function CarrosselPecasScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   grabberWrap: { alignItems: 'center', paddingTop: 4, paddingBottom: 8 },
   grabber: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border },

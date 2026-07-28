@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -6,7 +6,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api, IgCookie } from '@/lib/api';
 import { iniciarLAparaRun } from '@/lib/la';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 import { Botao } from '@/ui/components';
 import { LoadingDog } from '@/ui/LoadingDog';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -32,6 +33,8 @@ try {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function InstagramLoginScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const [carregandoPagina, setCarregandoPagina] = useState(true);
@@ -119,7 +122,7 @@ export function InstagramLoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   overlayPagina: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   rodape: { padding: 16, gap: 10, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },

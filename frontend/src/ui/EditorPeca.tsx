@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Animated, Linking, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
@@ -8,7 +8,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { api, DropResumo, Peca, PecaCampos } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
 import { fotoParaUpload } from '@/lib/foto';
-import { colors } from '@/theme';
+import { useI18n } from '@/i18n';
+import { traduzCategoria } from '@/i18n/categorias';
+import { TextoScramble } from '@/ui/TextoScramble';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 import { Botao } from '@/ui/components';
 import { BottomSheet } from '@/ui/BottomSheet';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -134,6 +138,9 @@ function gerarTemplate(f: Form): string {
 export function EditorPeca({
   visible, peca, onClose, onSaved,
 }: { visible: boolean; peca: Peca | null; onClose: () => void; onSaved: () => void }) {
+  const { colors } = useTheme();
+  const { t, lang } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const nav = useNavigation<Nav>();
   const [form, setForm] = useState<Form | null>(null);
   const [drops, setDrops] = useState<DropResumo[]>([]);
@@ -171,7 +178,7 @@ export function EditorPeca({
     const perm = daCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Ops', 'Preciso da permissão pra acessar as fotos.'); return; }
+    if (!perm.granted) { Alert.alert(t('editor.oops'), t('editor.needPhotoPerm')); return; }
     const res = daCamera
       ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
@@ -179,10 +186,10 @@ export function EditorPeca({
   }
 
   function pedirFoto() {
-    Alert.alert('Foto da peça', undefined, [
-      { text: 'Tirar foto', onPress: () => escolherFoto(true) },
-      { text: 'Escolher da galeria', onPress: () => escolherFoto(false) },
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('editor.photoTitle'), undefined, [
+      { text: t('editor.takePhoto'), onPress: () => escolherFoto(true) },
+      { text: t('editor.pickGallery'), onPress: () => escolherFoto(false) },
+      { text: t('editor.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -207,7 +214,7 @@ export function EditorPeca({
       }
       onClose(); onSaved();
     } catch {
-      Alert.alert('Ops', 'Não consegui salvar a peça.');
+      Alert.alert(t('editor.oops'), t('editor.saveFailed'));
     } finally {
       setSalvando(false);
     }
@@ -215,10 +222,10 @@ export function EditorPeca({
 
   function excluir() {
     if (!form?.id) return;
-    Alert.alert('Excluir peça', 'Some com a peça de vez. Confirma?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('editor.deleteItem'), t('editor.deleteMsg'), [
+      { text: t('editor.cancel'), style: 'cancel' },
       {
-        text: 'Excluir', style: 'destructive',
+        text: t('editor.delete'), style: 'destructive',
         onPress: async () => { try { await api.delPeca(form.id!); onClose(); onSaved(); } catch {} },
       },
     ]);
@@ -231,14 +238,14 @@ export function EditorPeca({
     <BottomSheet visible={visible} onClose={onClose}
       footer={form ? (
         <>
-          <Botao title="Salvar" onPress={salvar} loading={salvando} />
+          <Botao title={t('editor.save')} onPress={salvar} loading={salvando} />
           {form.id ? (
-            <Botao title="Excluir peça" cor={colors.card2} txtCor={colors.erro} onPress={excluir} />
+            <Botao title={t('editor.deleteItem')} cor={colors.card2} txtCor={colors.erro} onPress={excluir} />
           ) : null}
         </>
       ) : undefined}>
       <View style={styles.topo}>
-        <Text style={styles.titulo}>{form?.id ? 'Editar peça' : 'Nova peça'}</Text>
+        <Text style={styles.titulo}>{form?.id ? t('editor.editTitle') : t('editor.newTitle')}</Text>
         <TouchableOpacity onPress={onClose} hitSlop={10}>
           <Ionicons name="close" size={24} color={colors.textoFraco} />
         </TouchableOpacity>
@@ -252,7 +259,7 @@ export function EditorPeca({
             ) : (
               <View style={styles.fotoVazia}>
                 <Ionicons name="camera" size={26} color={colors.textoFraco} />
-                <Text style={styles.fotoVaziaTxt}>Adicionar foto</Text>
+                <Text style={styles.fotoVaziaTxt}>{t('editor.addPhoto')}</Text>
               </View>
             )}
             <View style={styles.fotoEditar}>
@@ -260,25 +267,30 @@ export function EditorPeca({
             </View>
           </TouchableOpacity>
 
-          <Campo label="Nome" valor={form.nome} onChange={(v) => {
+          <Campo label={t('editor.name')} valor={form.nome} onChange={(v) => {
             // categoria = 1ª palavra do nome, mas só enquanto não for editada na mão
             const nova = v.trim().split(/\s+/)[0] || '';
             const antiga = form.nome.trim().split(/\s+/)[0] || '';
             const itemAuto = !form.item.trim() || form.item.trim() === antiga;
             setForm({ ...form, nome: v, item: itemAuto ? nova : form.item });
           }} />
-          <Campo label="Categoria (item)" valor={form.item} onChange={(v) => setForm({ ...form, item: v })} />
+          <Campo label={t('editor.category')} valor={form.item} onChange={(v) => setForm({ ...form, item: v })} />
+          {/* prévia da categoria traduzida (EN): anima ao completar a 1ª palavra do nome */}
+          {lang === 'en' && form.item.trim() ? (
+            <TextoScramble ativo text={`→ ${traduzCategoria(form.item, lang)}`}
+              style={styles.categoriaEn} numberOfLines={1} />
+          ) : null}
           <View style={styles.dupla}>
-            <Campo label="Compra (R$)" valor={form.compra} numerico placeholder="0" style={{ flex: 1 }}
+            <Campo label={t('editor.cost')} valor={form.compra} numerico placeholder="0" style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, compra: v })} />
-            <Campo label="Venda (R$)" valor={form.venda} numerico placeholder="0" style={{ flex: 1 }}
+            <Campo label={t('editor.sale')} valor={form.venda} numerico placeholder="0" style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, venda: v })} />
           </View>
           <View style={styles.dupla}>
-            <Campo label="Tamanho" valor={form.tamanho} style={{ flex: 1 }}
+            <Campo label={t('editor.size')} valor={form.tamanho} style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, tamanho: v })} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.campoLabel}>Condição</Text>
+              <Text style={styles.campoLabel}>{t('editor.condition')}</Text>
               <View style={styles.condRow}>
                 <TextInput value={form.condicao.split('/')[0] || ''}
                   onChangeText={(v) => {
@@ -293,14 +305,14 @@ export function EditorPeca({
             </View>
           </View>
           <View style={styles.dupla}>
-            <Campo label="Largura (cm)" valor={form.largura} numerico style={{ flex: 1 }}
+            <Campo label={t('editor.width')} valor={form.largura} numerico style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, largura: v.replace(/[^\d.,]/g, '') })} />
-            <Campo label="Comprimento (cm)" valor={form.comprimento} numerico style={{ flex: 1 }}
+            <Campo label={t('editor.length')} valor={form.comprimento} numerico style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, comprimento: v.replace(/[^\d.,]/g, '') })} />
           </View>
 
           <View style={styles.linhaBool}>
-            <Text style={styles.boolLabel}>Medida especial (boné, tênis)</Text>
+            <Text style={styles.boolLabel}>{t('editor.specialMeasure')}</Text>
             <Switch value={mostrarMedida || form.medidas.length > 0}
               onValueChange={(v) => {
                 setMostrarMedida(v);
@@ -324,13 +336,13 @@ export function EditorPeca({
                     ))}
                   </ScrollView>
                   <View style={styles.medidaValorRow}>
-                    <TextInput value={m.tipo} placeholder="nome da medida" placeholderTextColor={colors.textoFraco}
+                    <TextInput value={m.tipo} placeholder={t('editor.measureNamePh')} placeholderTextColor={colors.textoFraco}
                       style={[styles.medidaInput, { flex: 1 }]}
                       onChangeText={(v) => { const ms = [...form.medidas]; ms[i] = { ...ms[i], tipo: v }; setForm({ ...form, medidas: ms }); }} />
-                    <TextInput value={m.valor} keyboardType="numeric" placeholder="cm"
+                    <TextInput value={m.valor} keyboardType="numeric" placeholder={t('editor.cm')}
                       placeholderTextColor={colors.textoFraco} style={[styles.medidaInput, { flex: 0, width: 60, textAlign: 'center' }]}
                       onChangeText={(v) => { const ms = [...form.medidas]; ms[i] = { ...ms[i], valor: v.replace(/[^\d.,]/g, '') }; setForm({ ...form, medidas: ms }); }} />
-                    <Text style={styles.cmTxt}>cm</Text>
+                    <Text style={styles.cmTxt}>{t('editor.cm')}</Text>
                     <TouchableOpacity hitSlop={8}
                       onPress={() => setForm({ ...form, medidas: form.medidas.filter((_, j) => j !== i) })}>
                       <Ionicons name="close-circle" size={22} color={colors.textoFraco} />
@@ -341,19 +353,19 @@ export function EditorPeca({
               <TouchableOpacity style={styles.addMedida}
                 onPress={() => setForm({ ...form, medidas: [...form.medidas, { tipo: '', valor: '' }] })}>
                 <Ionicons name="add" size={16} color={colors.marca} />
-                <Text style={styles.addMedidaTxt}>Adicionar medida</Text>
+                <Text style={styles.addMedidaTxt}>{t('editor.addMeasure')}</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          <Campo label="Observação (opcional)" valor={form.observacao} multiline
-            placeholder="ex: furinho na manga" onChange={(v) => setForm({ ...form, observacao: v })} />
+          <Campo label={t('editor.notes')} valor={form.observacao} multiline
+            placeholder={t('editor.notesPh')} onChange={(v) => setForm({ ...form, observacao: v })} />
 
           {form.origem === 'scraper' ? (
             <>
               <View style={styles.notaScraper}>
                 <Ionicons name="logo-instagram" size={15} color={colors.textoFraco} />
-                <Text style={styles.notaScraperTxt}>Peça do Insta — o drop já é o do post, não dá pra jogar num drop futuro.</Text>
+                <Text style={styles.notaScraperTxt}>{t('editor.scraperNote')}</Text>
               </View>
               {(() => {
                 const d = dropDaPeca(form.drop_id, form.postado_em);
@@ -361,7 +373,7 @@ export function EditorPeca({
                   <TouchableOpacity style={styles.verDrop} activeOpacity={0.8}
                     onPress={() => irPraDrop(form.drop_id, form.postado_em)}>
                     <Ionicons name="albums-outline" size={16} color={colors.marca} />
-                    <Text style={styles.verDropTxt}>Ver Drop {d.numero} (do post)</Text>
+                    <Text style={styles.verDropTxt}>{t('editor.viewDropPost', { n: d.numero })}</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.marca} />
                   </TouchableOpacity>
                 ) : null;
@@ -369,11 +381,11 @@ export function EditorPeca({
             </>
           ) : (
             <>
-              <Text style={styles.campoLabel}>Drop</Text>
+              <Text style={styles.campoLabel}>{t('editor.drop')}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                 <TouchableOpacity onPress={() => setForm({ ...form, drop_id: null })}
                   style={[styles.dropChip, form.drop_id == null && styles.dropChipOn]}>
-                  <Text style={[styles.dropChipTxt, form.drop_id == null && styles.dropChipTxtOn]}>Nenhum</Text>
+                  <Text style={[styles.dropChipTxt, form.drop_id == null && styles.dropChipTxtOn]}>{t('editor.none')}</Text>
                 </TouchableOpacity>
                 {drops.filter((d) => d.tipo === 'manual'
                   && (d.status !== 'publicado' || d.id === form.drop_id)).map((d) => (
@@ -389,7 +401,7 @@ export function EditorPeca({
                   <TouchableOpacity style={styles.verDrop} activeOpacity={0.8}
                     onPress={() => irPraDrop(form.drop_id, null)}>
                     <Ionicons name="albums-outline" size={16} color={colors.marca} />
-                    <Text style={styles.verDropTxt}>Ver Drop {d.numero} · {d.status}</Text>
+                    <Text style={styles.verDropTxt}>{t('editor.viewDropStatus', { n: d.numero, status: d.status })}</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.marca} />
                   </TouchableOpacity>
                 ) : null;
@@ -398,13 +410,13 @@ export function EditorPeca({
           )}
 
           <View style={styles.linhaBool}>
-            <Text style={styles.boolLabel}>Vendida</Text>
+            <Text style={styles.boolLabel}>{t('editor.sold')}</Text>
             <Switch value={form.vendida} onValueChange={(v) => setForm({ ...form, vendida: v })}
               trackColor={{ true: colors.ok, false: colors.border }} thumbColor="#fff" />
           </View>
 
           <View style={styles.linhaBool}>
-            <Text style={styles.boolLabel}>Consignado (peça de terceiro)</Text>
+            <Text style={styles.boolLabel}>{t('editor.consignment')}</Text>
             <Switch value={form.consignado} onValueChange={(v) => setForm({ ...form, consignado: v })}
               trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
           </View>
@@ -412,18 +424,18 @@ export function EditorPeca({
             <View style={styles.consigRow}>
               {/* toggle: % da venda OU valor fixo em R$ (um campo só) */}
               <View style={styles.consigModo}>
-                {(['pct', 'valor'] as const).map((t) => (
-                  <TouchableOpacity key={t} onPress={() => setForm({ ...form, consigTipo: t })}
-                    style={[styles.modoChip, form.consigTipo === t && styles.modoChipOn]}>
-                    <Text style={[styles.modoChipTxt, form.consigTipo === t && styles.modoChipTxtOn]}>
-                      {t === 'pct' ? '% da venda' : 'Valor fixo (R$)'}
+                {(['pct', 'valor'] as const).map((modo) => (
+                  <TouchableOpacity key={modo} onPress={() => setForm({ ...form, consigTipo: modo })}
+                    style={[styles.modoChip, form.consigTipo === modo && styles.modoChipOn]}>
+                    <Text style={[styles.modoChipTxt, form.consigTipo === modo && styles.modoChipTxtOn]}>
+                      {modo === 'pct' ? t('editor.consigPct') : t('editor.consigFixed')}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
               {form.consigTipo === 'pct' ? (
                 <>
-                  <Text style={styles.campoLabel}>% que fica pra mim</Text>
+                  <Text style={styles.campoLabel}>{t('editor.consigPctLabel')}</Text>
                   <View style={styles.consigInputWrap}>
                     <TextInput value={form.consigPct} keyboardType="numeric" maxLength={3}
                       placeholder="40" placeholderTextColor={colors.textoFraco} style={[styles.input, { flex: 1 }]}
@@ -433,7 +445,7 @@ export function EditorPeca({
                 </>
               ) : (
                 <>
-                  <Text style={styles.campoLabel}>R$ que fica pra mim (fixo por venda)</Text>
+                  <Text style={styles.campoLabel}>{t('editor.consigFixedLabel')}</Text>
                   <View style={styles.consigInputWrap}>
                     <Text style={styles.condSufixo}>R$</Text>
                     <TextInput value={form.consigValor} keyboardType="numeric"
@@ -447,7 +459,11 @@ export function EditorPeca({
                 const recebe = recebeConsig(venda, form.consigTipo, num(form.consigPct), num(form.consigValor));
                 return (
                   <Text style={styles.consigPreview}>
-                    você recebe {brl(recebe)}{form.consigTipo === 'valor' ? ` (${pctStr(recebe, venda)})` : ''} da venda de {brl(venda)}
+                    {t('editor.consigPreview', {
+                      recebe: brl(recebe),
+                      pct: form.consigTipo === 'valor' ? ` (${pctStr(recebe, venda)})` : '',
+                      venda: brl(venda),
+                    })}
                   </Text>
                 );
               })()}
@@ -456,8 +472,8 @@ export function EditorPeca({
 
           <View style={styles.linhaBool}>
             <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.boolLabel}>Manual (o scraper não atualiza)</Text>
-              <Text style={styles.boolSub}>trava a peça pra a raspagem do Insta nunca mexer nela</Text>
+              <Text style={styles.boolLabel}>{t('editor.manualLabel')}</Text>
+              <Text style={styles.boolSub}>{t('editor.manualSub')}</Text>
             </View>
             <Switch value={form.soManual} onValueChange={(v) => setForm({ ...form, soManual: v })}
               trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
@@ -471,7 +487,7 @@ export function EditorPeca({
             return (
               <View style={styles.templateBox}>
                 <View style={styles.templateTopo}>
-                  <Text style={styles.campoLabel}>Template do post{manual ? ' (editável)' : ''}</Text>
+                  <Text style={styles.campoLabel}>{t('editor.templatePost')}{manual ? t('editor.editableSuffix') : ''}</Text>
                   <BotaoCopiar texto={manual && custom ? form.template : gerado} />
                 </View>
                 {manual ? (
@@ -480,11 +496,11 @@ export function EditorPeca({
                       value={custom ? form.template : gerado}
                       onChangeText={(v) => setForm({ ...form, template: v })}
                       multiline textAlignVertical="top"
-                      placeholder="legenda do post…" placeholderTextColor={colors.textoFraco}
+                      placeholder={t('editor.templatePh')} placeholderTextColor={colors.textoFraco}
                       style={styles.templateInput} />
                     {custom && (
                       <TouchableOpacity onPress={() => setForm({ ...form, template: '' })} hitSlop={6}>
-                        <Text style={styles.templateReset}>voltar ao automático</Text>
+                        <Text style={styles.templateReset}>{t('editor.backToAuto')}</Text>
                       </TouchableOpacity>
                     )}
                   </>
@@ -496,7 +512,7 @@ export function EditorPeca({
           })()}
 
           {form.code && (
-            <Botao title="Abrir no Instagram" cor={colors.card2} txtCor={colors.marca}
+            <Botao title={t('editor.openInstagram')} cor={colors.card2} txtCor={colors.marca}
               onPress={() => Linking.openURL(`https://www.instagram.com/p/${form.code}/`)} />
           )}
         </ScrollView>
@@ -512,6 +528,8 @@ function brl(n: number) {
 
 function Campo({ label, valor, onChange, numerico, multiline, placeholder, style }:
   { label: string; valor: string; onChange: (v: string) => void; numerico?: boolean; multiline?: boolean; placeholder?: string; style?: object }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={style}>
       <Text style={styles.campoLabel}>{label}</Text>
@@ -525,6 +543,9 @@ function Campo({ label, valor, onChange, numerico, multiline, placeholder, style
 
 // Botão "Copiar" que vira "Copiado" (laranja escuro) por 2s, com animação.
 function BotaoCopiar({ texto }: { texto: string }) {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [copiado, setCopiado] = React.useState(false);
   const anim = React.useRef(new Animated.Value(0)).current;
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -549,13 +570,13 @@ function BotaoCopiar({ texto }: { texto: string }) {
     <TouchableOpacity activeOpacity={0.85} onPress={aoCopiar} hitSlop={8}>
       <Animated.View style={[styles.copiarBtn, { backgroundColor: bg, borderColor: borda, transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }] }]}>
         <Ionicons name={copiado ? 'checkmark' : 'copy-outline'} size={14} color={copiado ? '#FFFFFF' : colors.marca} />
-        <Animated.Text style={[styles.copiarTxt, { color: corTxt }]}>{copiado ? 'Copiado' : 'Copiar'}</Animated.Text>
+        <Animated.Text style={[styles.copiarTxt, { color: corTxt }]}>{copiado ? t('editor.copied') : t('editor.copy')}</Animated.Text>
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   titulo: { color: colors.texto, fontSize: 18, fontWeight: '800' },
   fotoBox: { alignSelf: 'center', width: 168, height: 210, borderRadius: 16, backgroundColor: colors.card2, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
@@ -565,6 +586,7 @@ const styles = StyleSheet.create({
   fotoEditar: { position: 'absolute', bottom: 8, right: 8, backgroundColor: colors.marca, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   dupla: { flexDirection: 'row', gap: 12 },
   campoLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  categoriaEn: { color: colors.marca, fontSize: 12, fontWeight: '700', marginTop: -6, marginLeft: 2 },
   input: { backgroundColor: colors.card2, color: colors.texto, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border },
   inputMultiline: { minHeight: 72, paddingTop: 12 },
   condRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

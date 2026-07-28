@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, Dimensions, Easing, Keyboard, Modal, PanResponder, Platform, Pressable,
   StyleSheet, View, ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 
 const H = Dimensions.get('window').height;
 
@@ -14,6 +15,8 @@ export function BottomSheet({
   visible, onClose, children, footer, style,
 }: { visible: boolean; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; style?: ViewStyle }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const ty = useRef(new Animated.Value(H)).current;
   const backdrop = useRef(new Animated.Value(0)).current;
   const [montado, setMontado] = useState(false);
@@ -114,7 +117,7 @@ export function BottomSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   wrap: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {

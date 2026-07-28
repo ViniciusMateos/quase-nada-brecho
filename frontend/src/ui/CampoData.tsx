@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 
 // Campo de data: dá pra digitar (DD/MM/AAAA, com máscara) OU tocar no calendário.
 // Guarda/entrega no formato ISO (AAAA-MM-DD) pro backend; mostra em DD/MM/AAAA.
@@ -40,6 +41,8 @@ function parseISO(iso?: string | null): Date | null {
 export function CampoData({
   label, valor, onChange, placeholder,
 }: { label?: string; valor: string; onChange: (iso: string) => void; placeholder?: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [texto, setTexto] = useState(isoToBR(valor));
   const [aberto, setAberto] = useState(false);
 
@@ -108,6 +111,8 @@ function grid(ano: number, mes: number) {
 }
 
 function Calendario({ selecionada, onSelect }: { selecionada: Date | null; onSelect: (d: Date) => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const hoje = new Date();
   const [ano, setAno] = useState(selecionada ? selecionada.getFullYear() : hoje.getFullYear());
   const [mes, setMes] = useState(selecionada ? selecionada.getMonth() : hoje.getMonth());
@@ -168,7 +173,7 @@ function Calendario({ selecionada, onSelect }: { selecionada: Date | null; onSel
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   label: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase' },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: { flex: 1, backgroundColor: colors.card2, color: colors.texto, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border, fontSize: 16 },

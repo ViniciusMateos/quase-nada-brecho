@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, DropDetalhe, Peca } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
-import { colors, statusDrop } from '@/theme';
+import { type Cores, statusDrop } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
 import { Aparece, Botao, Pressavel } from '@/ui/components';
 import { BottomSheet } from '@/ui/BottomSheet';
 import { EditorPeca } from '@/ui/EditorPeca';
@@ -36,6 +38,9 @@ function pctStr(recebe: number, venda: number): string {
 const STATUS_ORDEM = ['rascunho', 'agendado', 'publicado'];
 
 export function DropDetailScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
   const { params } = useRoute<R>();
@@ -73,27 +78,27 @@ export function DropDetailScreen() {
       await api.editDrop(params.dropId, { nome: nome.trim() || 'Drop', data: data.trim() || null, status });
       nav.goBack();   // salvou → volta pra lista de drops
     } catch {
-      Alert.alert('Ops', 'Não consegui salvar o drop.');
+      Alert.alert(t('drops.errorTitle'), t('drops.saveError'));
     } finally {
       setSalvando(false);
     }
   }
 
   function excluir() {
-    Alert.alert('Excluir drop', 'As peças voltam pra "sem drop". Confirma?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('drops.deleteDrop'), t('drops.deleteMsg'), [
+      { text: t('drops.cancel'), style: 'cancel' },
       {
-        text: 'Excluir', style: 'destructive',
+        text: t('drops.delete'), style: 'destructive',
         onPress: async () => { try { await api.delDrop(params.dropId); nav.goBack(); } catch {} },
       },
     ]);
   }
 
   function removerPeca(peca: Peca) {
-    Alert.alert('Tirar do drop', `Remover "${peca.nome || peca.item || `Peça ${peca.id}`}" deste drop? Ela volta pra "sem drop".`, [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('drops.removePieceTitle'), t('drops.removePieceMsg', { nome: peca.nome || peca.item || `Peça ${peca.id}` }), [
+      { text: t('drops.cancel'), style: 'cancel' },
       {
-        text: 'Tirar', style: 'destructive',
+        text: t('drops.remove'), style: 'destructive',
         onPress: async () => {
           setRemovendo(peca.id);
           try { await api.editPeca(peca.id, { drop_id: null }); await carregar(); } catch {}
@@ -108,7 +113,7 @@ export function DropDetailScreen() {
     try {
       await Promise.all([...sel].map((id) => api.editPeca(id, { drop_id: params.dropId })));
       setSel(new Set()); setAddOpen(false); await carregar();
-    } catch { Alert.alert('Ops', 'Não consegui adicionar as peças.'); }
+    } catch { Alert.alert(t('drops.errorTitle'), t('drops.addError')); }
     finally { setAdicionando(false); }
   }
 
@@ -130,38 +135,38 @@ export function DropDetailScreen() {
         ListHeaderComponent={
           <Aparece>
             <View style={styles.card}>
-              <CampoData label="Data" valor={data} onChange={setData} />
-              <Text style={styles.label}>Status</Text>
+              <CampoData label={t('drops.date')} valor={data} onChange={setData} />
+              <Text style={styles.label}>{t('drops.status')}</Text>
               <View style={styles.statusRow}>
                 {STATUS_ORDEM.map((s) => (
                   <TouchableOpacity key={s} onPress={() => setStatus(s)}
-                    style={[styles.stChip, status === s && { backgroundColor: statusDrop[s].cor, borderColor: statusDrop[s].cor }]}>
+                    style={[styles.stChip, status === s && { backgroundColor: statusDrop(colors)[s].cor, borderColor: statusDrop(colors)[s].cor }]}>
                     <Text style={[styles.stTxt, status === s && { color: '#FFFFFF', fontWeight: '700' }]}>
-                      {statusDrop[s].label}
+                      {statusDrop(colors)[s].label}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
               <View style={{ height: 12 }} />
-              <Botao title="Salvar drop" onPress={salvar} loading={salvando} />
+              <Botao title={t('drops.saveDrop')} onPress={salvar} loading={salvando} />
               <TouchableOpacity style={styles.excluirInline} onPress={excluir}>
                 <Ionicons name="trash-outline" size={15} color={colors.erro} />
-                <Text style={styles.excluirTxt}>Excluir drop</Text>
+                <Text style={styles.excluirTxt}>{t('drops.deleteDrop')}</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.resumo}>
               <Text style={styles.resumoTxt}>
-                {drop.pecas.length} peça{drop.pecas.length === 1 ? '' : 's'} · {brl(totalVenda)} em vendas
+                {t('drops.summary', { n: drop.pecas.length, v: brl(totalVenda) })}
               </Text>
               <TouchableOpacity onPress={() => setAddOpen(true)} style={styles.addPecas}>
                 <Ionicons name="add" size={16} color="#FFFFFF" />
-                <Text style={styles.addPecasTxt}>Peças</Text>
+                <Text style={styles.addPecasTxt}>{t('drops.pieces')}</Text>
               </TouchableOpacity>
             </View>
           </Aparece>
         }
-        ListEmptyComponent={<Text style={styles.vazio}>Nenhuma peça nesse drop ainda.</Text>}
+        ListEmptyComponent={<Text style={styles.vazio}>{t('drops.emptyPieces')}</Text>}
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 10) * 45}>
             <Pressavel style={StyleSheet.flatten([styles.linha, item.consignado && styles.linhaConsig])}
@@ -180,13 +185,13 @@ export function DropDetailScreen() {
                   {item.consignado && (
                     <View style={styles.consigTag}>
                       <Ionicons name="people" size={9} color="#FFFFFF" />
-                      <Text style={styles.consigTagTxt}>consig</Text>
+                      <Text style={styles.consigTagTxt}>{t('drops.consig')}</Text>
                     </View>
                   )}
                 </View>
                 {item.consignado && (
                   <Text style={styles.recebe}>
-                    recebe {brl(recebeConsig(item))} {item.consig_tipo === 'valor' ? `(fixo · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}
+                    {t('drops.receives', { v: brl(recebeConsig(item)) })} {item.consig_tipo === 'valor' ? `(${t('drops.fixed')} · ${pctStr(recebeConsig(item), item.venda)})` : `(${item.consig_pct || 0}%)`}
                   </Text>
                 )}
               </View>
@@ -196,7 +201,7 @@ export function DropDetailScreen() {
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={styles.venda}>{brl(item.venda)}</Text>
                   <Text style={[styles.tag, { color: item.vendida ? colors.ok : colors.textoFraco }]}>
-                    {item.vendida ? 'vendida' : 'disponível'}
+                    {item.vendida ? t('drops.sold') : t('drops.available')}
                   </Text>
                 </View>
               )}
@@ -208,7 +213,7 @@ export function DropDetailScreen() {
       {/* adicionar peças (sheet com grabber + arrastar pra fechar) */}
       <BottomSheet visible={addOpen} onClose={() => setAddOpen(false)}>
         <View style={styles.modalTopo}>
-          <Text style={styles.modalTitulo}>Adicionar peças</Text>
+          <Text style={styles.modalTitulo}>{t('drops.addPieces')}</Text>
           <TouchableOpacity onPress={() => setAddOpen(false)} hitSlop={10}>
             <Ionicons name="close" size={24} color={colors.textoFraco} />
           </TouchableOpacity>
@@ -218,7 +223,7 @@ export function DropDetailScreen() {
           keyExtractor={(p) => String(p.id)}
           style={{ maxHeight: 420 }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={styles.vazio}>Nenhuma peça do catálogo disponível pra adicionar.</Text>}
+          ListEmptyComponent={<Text style={styles.vazio}>{t('drops.emptyCatalog')}</Text>}
           renderItem={({ item, index }) => {
             const on = sel.has(item.id);
             return (
@@ -235,7 +240,7 @@ export function DropDetailScreen() {
                   )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.nome} numberOfLines={1}>{item.nome || item.item || `Peça ${item.id}`}</Text>
-                    <Text style={styles.sub}>{item.drop_nome ? `em ${item.drop_nome}` : 'sem drop'} · {brl(item.venda)}</Text>
+                    <Text style={styles.sub}>{item.drop_nome ? t('drops.inDrop', { nome: item.drop_nome }) : t('drops.noDrop')} · {brl(item.venda)}</Text>
                   </View>
                   <Ionicons name={on ? 'checkmark-circle' : 'ellipse-outline'} size={22}
                     color={on ? colors.marca : colors.textoFraco} />
@@ -245,7 +250,7 @@ export function DropDetailScreen() {
           }}
         />
         <View style={{ height: 12 }} />
-        <Botao title={sel.size ? `Adicionar ${sel.size}` : 'Selecione peças'} onPress={confirmarAdd} disabled={!sel.size} loading={adicionando} />
+        <Botao title={sel.size ? t('drops.addN', { n: sel.size }) : t('drops.selectPieces')} onPress={confirmarAdd} disabled={!sel.size} loading={adicionando} />
       </BottomSheet>
 
       <EditorPeca visible={!!editarPeca} peca={editarPeca} onClose={() => setEditarPeca(null)} onSaved={carregar} />
@@ -253,15 +258,15 @@ export function DropDetailScreen() {
       <MenuContexto
         visible={!!menu} x={menu?.x ?? 0} y={menu?.y ?? 0} onClose={() => setMenu(null)}
         itens={menu ? [
-          { label: 'Editar', icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setTimeout(() => setEditarPeca(p), 180); } },
-          { label: 'Remover do drop', icon: 'remove-circle-outline', cor: colors.erro, onPress: () => { const p = menu.peca; setMenu(null); removerPeca(p); } },
+          { label: t('drops.edit'), icon: 'create-outline', onPress: () => { const p = menu.peca; setMenu(null); setTimeout(() => setEditarPeca(p), 180); } },
+          { label: t('drops.removeFromDrop'), icon: 'remove-circle-outline', cor: colors.erro, onPress: () => { const p = menu.peca; setMenu(null); removerPeca(p); } },
         ] : []}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border, marginBottom: 12 },
   label: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 6, marginTop: 10, textTransform: 'uppercase' },

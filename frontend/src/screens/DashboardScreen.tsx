@@ -1,11 +1,14 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Dashboard, DropResumo } from '@/lib/api';
-import { colors } from '@/theme';
+import { useI18n } from '@/i18n';
+import { traduzCategoria } from '@/i18n/categorias';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 import { Aparece, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
@@ -26,6 +29,9 @@ function rotuloDrop(s: string) {
 }
 
 export function DashboardScreen() {
+  const { colors } = useTheme();
+  const { t, lang } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [dropsInfo, setDropsInfo] = useState<DropResumo[]>([]);
   const nav = useNavigation<Nav>();
@@ -55,7 +61,7 @@ export function DashboardScreen() {
     return (
       <View style={styles.vazioTela}>
         <Text style={styles.vazioTxt}>
-          Cadastra as primeiras peças em "Peças" que os números aparecem aqui.
+          {t('dashboard.vazio')}
         </Text>
       </View>
     );
@@ -70,42 +76,42 @@ export function DashboardScreen() {
       {spacerEl}
       <Aparece>
         <View style={styles.heroGrid}>
-          <Hero titulo="Faturamento" valor={brl(k.faturamento)} cor={colors.ok} />
-          <Hero titulo="Lucro" valor={brl(k.lucro)} cor={colors.amarelo} rodape={`margem ${pct(k.margem_pct)}`} />
-          <Hero titulo="ROI" valor={pct(k.roi_pct)} cor={colors.laranja} rodape="retorno s/ custo" />
-          <Hero titulo="Taxa de venda" valor={pct(k.taxa_venda)} cor={colors.rosa} rodape={`${k.vendidas}/${k.total} peças`} />
+          <Hero titulo={t('dashboard.faturamento')} valor={brl(k.faturamento)} cor={colors.ok} />
+          <Hero titulo={t('dashboard.lucro')} valor={brl(k.lucro)} cor={colors.amarelo} rodape={t('dashboard.margem', { p: pct(k.margem_pct) })} />
+          <Hero titulo={t('dashboard.roi')} valor={pct(k.roi_pct)} cor={colors.laranja} rodape={t('dashboard.retornoCusto')} />
+          <Hero titulo={t('dashboard.taxaVenda')} valor={pct(k.taxa_venda)} cor={colors.rosa} rodape={t('dashboard.pecasFrac', { v: k.vendidas, t: k.total })} />
         </View>
       </Aparece>
 
       <Aparece delay={60}>
         <Card style={{ gap: 2 }}>
-          <Secao>Vendas</Secao>
-          <Metric label="Projeção total (vendido + estoque)" valor={brl(k.faturamento + k.estoque_valor)} destaque />
-          <Metric label="Peças vendidas" valor={`${k.vendidas}`} />
-          <Metric label="Ticket médio (venda)" valor={brl(k.ticket_medio)} />
-          <Metric label="Custo médio (por peça vendida)" valor={brl(k.custo_medio)} />
-          <Metric label="CMV — custo das vendidas" valor={brl(k.cmv)} />
-          <Metric label="Investido total (todas as peças)" valor={brl(k.investido_total)} />
+          <Secao>{t('dashboard.vendas')}</Secao>
+          <Metric label={t('dashboard.projecaoTotal')} valor={brl(k.faturamento + k.estoque_valor)} destaque />
+          <Metric label={t('dashboard.pecasVendidas')} valor={`${k.vendidas}`} />
+          <Metric label={t('dashboard.ticketMedio')} valor={brl(k.ticket_medio)} />
+          <Metric label={t('dashboard.custoMedio')} valor={brl(k.custo_medio)} />
+          <Metric label={t('dashboard.cmv')} valor={brl(k.cmv)} />
+          <Metric label={t('dashboard.investidoTotal')} valor={brl(k.investido_total)} />
         </Card>
       </Aparece>
 
       <Aparece delay={120}>
         <Card style={{ gap: 2 }}>
-          <Secao>Estoque (a vender)</Secao>
-          <Metric label="Peças disponíveis" valor={`${k.disponiveis}`} />
-          <Metric label="Valor de venda parado" valor={brl(k.estoque_valor)} />
-          <Metric label="Custo do estoque" valor={brl(k.estoque_custo)} />
-          <Metric label="Lucro potencial (se vender tudo)" valor={brl(k.estoque_lucro_potencial)} destaque />
+          <Secao>{t('dashboard.estoque')}</Secao>
+          <Metric label={t('dashboard.pecasDisponiveis')} valor={`${k.disponiveis}`} />
+          <Metric label={t('dashboard.valorParado')} valor={brl(k.estoque_valor)} />
+          <Metric label={t('dashboard.custoEstoque')} valor={brl(k.estoque_custo)} />
+          <Metric label={t('dashboard.lucroPotencial')} valor={brl(k.estoque_lucro_potencial)} destaque />
         </Card>
       </Aparece>
 
       {dash.por_categoria.length > 0 && (
         <Aparece delay={160}>
           <Card style={{ gap: 6 }}>
-            <Secao>Por categoria</Secao>
+            <Secao>{t('dashboard.porCategoria')}</Secao>
             <TabelaHead />
             {dash.por_categoria.slice(0, 12).map((c) => (
-              <TabelaLinha key={c.item} nome={c.item} vendidas={c.vendidas} total={c.total}
+              <TabelaLinha key={c.item} nome={traduzCategoria(c.item, lang)} vendidas={c.vendidas} total={c.total}
                 faturamento={c.faturamento} lucro={c.lucro}
                 onPress={() => nav.navigate('Pecas', { categoria: c.item })} />
             ))}
@@ -116,8 +122,8 @@ export function DashboardScreen() {
       {dash.por_drop.length > 0 && (
         <Aparece delay={200}>
           <Card style={{ gap: 6 }}>
-            <Secao>Por drop ({dash.por_drop.length})</Secao>
-            <TabelaHead col1="drop" />
+            <Secao>{t('dashboard.porDrop', { n: dash.por_drop.length })}</Secao>
+            <TabelaHead col1={t('dashboard.colDrop')} />
             {dash.por_drop.slice(0, 12).map((d, i) => (
               <TabelaLinha key={`drop-${d.numero ?? d.drop}-${i}`}
                 nome={d.numero != null ? `Drop ${d.numero}` : rotuloDrop(d.drop)}
@@ -134,6 +140,8 @@ export function DashboardScreen() {
 }
 
 function Hero({ titulo, valor, cor, rodape }: { titulo: string; valor: string; cor: string; rodape?: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.hero, { borderLeftColor: cor }]}>
       <Text style={styles.heroTitulo}>{titulo}</Text>
@@ -143,9 +151,15 @@ function Hero({ titulo, valor, cor, rodape }: { titulo: string; valor: string; c
   );
 }
 
-const Secao = ({ children }: { children: React.ReactNode }) => <Text style={styles.secao}>{children}</Text>;
+const Secao = ({ children }: { children: React.ReactNode }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return <Text style={styles.secao}>{children}</Text>;
+};
 
 function Metric({ label, valor, destaque }: { label: string; valor: string; destaque?: boolean }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.metric}>
       <Text style={styles.metricLabel}>{label}</Text>
@@ -154,19 +168,24 @@ function Metric({ label, valor, destaque }: { label: string; valor: string; dest
   );
 }
 
-function TabelaHead({ col1 = 'item' }: { col1?: string }) {
+function TabelaHead({ col1 }: { col1?: string }) {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.tabLinha}>
-      <Text style={[styles.tabNome, styles.tabHead]}>{col1}</Text>
-      <Text style={[styles.tabCol, styles.tabHead]}>vend.</Text>
-      <Text style={[styles.tabCol, styles.tabHead, { flex: 1.3 }]}>fatur.</Text>
-      <Text style={[styles.tabCol, styles.tabHead, { flex: 1.3 }]}>lucro</Text>
+      <Text style={[styles.tabNome, styles.tabHead]}>{col1 ?? t('dashboard.colItem')}</Text>
+      <Text style={[styles.tabCol, styles.tabHead]}>{t('dashboard.colVend')}</Text>
+      <Text style={[styles.tabCol, styles.tabHead, { flex: 1.3 }]}>{t('dashboard.colFatur')}</Text>
+      <Text style={[styles.tabCol, styles.tabHead, { flex: 1.3 }]}>{t('dashboard.colLucro')}</Text>
     </View>
   );
 }
 
 function TabelaLinha({ nome, sub, vendidas, total, faturamento, lucro, onPress }:
   { nome: string; sub?: string; vendidas: number; total: number; faturamento: number; lucro: number; onPress?: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const conteudo = (
     <>
       <View style={styles.tabNome}>
@@ -185,7 +204,7 @@ function TabelaLinha({ nome, sub, vendidas, total, faturamento, lucro, onPress }
   return <View style={styles.tabLinha}>{conteudo}</View>;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   vazioTela: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: 32 },
   vazioTxt: { color: colors.textoFraco, textAlign: 'center', lineHeight: 20 },

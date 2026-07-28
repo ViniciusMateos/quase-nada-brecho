@@ -1,18 +1,26 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, RunInfo } from '@/lib/api';
-import { colors, statusCor } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
+import { type Cores, statusCor } from '@/theme';
 import { Aparece, Botao, Card, Pill, Pulsar } from '@/ui/components';
 import { iniciarLAparaRun } from '@/lib/la';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro'];
+
 export function SincronizarScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const statusTxt = (s: string) => (STATUS_RUN.includes(s) ? t(`run.status.${s}`) : s);
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const [runs, setRuns] = useState<RunInfo[]>([]);
@@ -36,11 +44,11 @@ export function SincronizarScreen() {
     setIniciando(true);
     try {
       const run = await api.startRun(params);
-      await iniciarLAparaRun(run.id, 'Raspando o brechó');
+      await iniciarLAparaRun(run.id, t('sync.la'));
       nav.navigate('Run', { runId: run.id, nome });
     } catch {
       carregar();  // pode ter sido "já tem raspagem rodando" (409) → atualiza o estado dos botões
-      Alert.alert('Ops', 'Não consegui iniciar. Pode já ter uma raspagem rodando, ou confere o servidor/token e se o Instagram está conectado.');
+      Alert.alert(t('sync.err.title'), t('sync.err.msg'));
     } finally {
       setIniciando(false);
     }
@@ -52,31 +60,23 @@ export function SincronizarScreen() {
     <ScrollView style={styles.tela} contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 24 }}>
       <Aparece>
         <Card style={{ gap: 12 }}>
-          <Text style={styles.titulo}>Raspar o Instagram</Text>
-          <Text style={styles.desc}>
-            Lê os posts do @brechoquasenadaa, atualiza vendas/disponíveis e sincroniza os números
-            do dashboard. As peças raspadas entram como histórico (não bagunçam o planejamento de drops).
-          </Text>
-          <Botao title={raspando ? 'Raspagem em andamento…' : 'Atualizar agora'}
-            onPress={() => rodar({}, 'Raspagem do brechó')} loading={iniciando} disabled={raspando || iniciando} />
-          <Botao title="Prévia (não grava)" cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ dry_run: true }, 'Prévia da raspagem')} disabled={raspando || iniciando} />
-          <Botao title="Raspagem completa" cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ full: true }, 'Raspagem completa')} disabled={raspando || iniciando} />
-          <Text style={styles.hint}>
-            Completa = re-lê o feed inteiro e recaptura as fotos. Use quando alguma foto sumir
-            (os links do Insta expiram) ou pra forçar uma atualização geral do brechó.
-          </Text>
+          <Text style={styles.titulo}>{t('sync.card.title')}</Text>
+          <Text style={styles.desc}>{t('sync.card.desc')}</Text>
+          <Botao title={raspando ? t('sync.inProgress') : t('sync.update')}
+            onPress={() => rodar({}, t('sync.run.scrape'))} loading={iniciando} disabled={raspando || iniciando} />
+          <Botao title={t('sync.preview')} cor={colors.card2} txtCor={colors.texto}
+            onPress={() => rodar({ dry_run: true }, t('sync.run.preview'))} disabled={raspando || iniciando} />
+          <Botao title={t('sync.full')} cor={colors.card2} txtCor={colors.texto}
+            onPress={() => rodar({ full: true }, t('sync.full'))} disabled={raspando || iniciando} />
+          <Text style={styles.hint}>{t('sync.hint')}</Text>
         </Card>
       </Aparece>
 
       <Aparece delay={40}>
         <Card style={{ gap: 12 }}>
-          <Text style={styles.titulo}>Instagram</Text>
-          <Text style={styles.desc}>
-            Loga uma vez na conta do brechó pra liberar a raspagem. A sessão fica salva no servidor.
-          </Text>
-          <Botao title="Conectar Instagram" cor={colors.marca} txtCor="#FFFFFF"
+          <Text style={styles.titulo}>{t('sync.ig.title')}</Text>
+          <Text style={styles.desc}>{t('sync.ig.desc')}</Text>
+          <Botao title={t('sync.ig.connect')} cor={colors.marca} txtCor="#FFFFFF"
             onPress={() => nav.navigate('InstagramLogin')} />
         </Card>
       </Aparece>
@@ -84,14 +84,14 @@ export function SincronizarScreen() {
       {ativos.length > 0 && (
         <Aparece delay={80}>
           <Card>
-            <Text style={styles.secao}>Rodando agora</Text>
+            <Text style={styles.secao}>{t('sync.running')}</Text>
             {ativos.map((r) => (
               <View key={r.id} style={styles.runItem}>
-                <Text style={styles.runTxt} onPress={() => nav.navigate('Run', { runId: r.id, nome: 'Raspagem' })}>
-                  ver logs →
+                <Text style={styles.runTxt} onPress={() => nav.navigate('Run', { runId: r.id, nome: t('sync.run.name') })}>
+                  {t('sync.seeLogs')}
                 </Text>
                 <Pulsar>
-                  <Pill texto={r.status} cor={statusCor[r.status] ?? colors.textoFraco} />
+                  <Pill texto={statusTxt(r.status)} cor={statusCor(colors)[r.status] ?? colors.textoFraco} />
                 </Pulsar>
               </View>
             ))}
@@ -102,14 +102,14 @@ export function SincronizarScreen() {
       {runs.length > 0 && (
         <Aparece delay={120}>
           <Card style={{ gap: 8 }}>
-            <Text style={styles.secao}>Últimas execuções</Text>
+            <Text style={styles.secao}>{t('sync.lastRuns')}</Text>
             {runs.slice(0, 8).map((r) => (
               <View key={r.id} style={styles.histItem}>
                 <Ionicons name="time-outline" size={15} color={colors.textoFraco} />
-                <Text style={styles.histTxt} onPress={() => nav.navigate('Run', { runId: r.id, nome: 'Execução' })}>
+                <Text style={styles.histTxt} onPress={() => nav.navigate('Run', { runId: r.id, nome: t('sync.run.execution') })}>
                   {r.id}
                 </Text>
-                <Pill texto={r.status} cor={statusCor[r.status] ?? colors.textoFraco} />
+                <Pill texto={statusTxt(r.status)} cor={statusCor(colors)[r.status] ?? colors.textoFraco} />
               </View>
             ))}
           </Card>
@@ -119,7 +119,7 @@ export function SincronizarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   titulo: { color: colors.texto, fontSize: 17, fontWeight: '800' },
   desc: { color: colors.textoFraco, fontSize: 13, lineHeight: 19 },

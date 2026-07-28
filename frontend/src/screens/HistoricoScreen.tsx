@@ -3,7 +3,11 @@ import { Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-nat
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, RunHistorico } from '@/lib/api';
-import { colors } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
+import { type Cores } from '@/theme';
+
+type TFn = (key: string, params?: Record<string, string | number>) => string;
 import { Aparece, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
 
@@ -26,22 +30,26 @@ function fmtDur(s: number | null) {
   if (m < 60) return `${m}m ${Math.round(s % 60)}s`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
-function resultado(r: RunHistorico): { icon: keyof typeof Ionicons.glyphMap; label: string; cor: string } {
-  if (r.bloqueio) return { icon: 'ban', label: 'bloqueio', cor: colors.erro };
-  if (r.status === 'erro') return { icon: 'close-circle', label: 'erro', cor: colors.erro };
-  if (r.status === 'parado') return { icon: 'stop-circle', label: 'parado', cor: colors.textoFraco };
-  return { icon: 'checkmark-circle', label: 'ok', cor: colors.ok };
+// label = CHAVE de tradução (traduzida no render, onde o t está disponível)
+function resultado(r: RunHistorico, colors: Cores): { icon: keyof typeof Ionicons.glyphMap; label: string; cor: string } {
+  if (r.bloqueio) return { icon: 'ban', label: 'historico.res.bloqueio', cor: colors.erro };
+  if (r.status === 'erro') return { icon: 'close-circle', label: 'historico.res.erro', cor: colors.erro };
+  if (r.status === 'parado') return { icon: 'stop-circle', label: 'historico.res.parado', cor: colors.textoFraco };
+  return { icon: 'checkmark-circle', label: 'historico.res.ok', cor: colors.ok };
 }
-function saldoTxt(r: RunHistorico): string {
+function saldoTxt(r: RunHistorico, t: TFn): string {
   const s = r.saldo || {};
   return [
-    `${s.atualizadas ?? 0} atualizadas`,
-    `${s.reconciliadas ?? 0} relacionadas`,
-    `${s.recem_vendidas ?? 0} vendidas`,
+    t('historico.saldo.updated', { n: s.atualizadas ?? 0 }),
+    t('historico.saldo.related', { n: s.reconciliadas ?? 0 }),
+    t('historico.saldo.sold', { n: s.recem_vendidas ?? 0 }),
   ].join(' · ');
 }
 
 export function HistoricoScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [regs, setRegs] = useState<RunHistorico[] | null>(null);
   const [fRes, setFRes] = useState<FiltroRes>('todas');
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
@@ -85,17 +93,17 @@ export function HistoricoScreen() {
       <View style={styles.header}>
         <Aparece>
           <Card style={styles.resumo}>
-            <Bloco num={resumo.atualizadas} label="atualizadas" />
+            <Bloco num={resumo.atualizadas} label={t('historico.updated')} />
             <View style={styles.divisor} />
-            <Bloco num={resumo.relacionadas} label="relacionadas" />
+            <Bloco num={resumo.relacionadas} label={t('historico.related')} />
             <View style={styles.divisor} />
-            <Bloco num={resumo.vendidas} label="vendidas" />
+            <Bloco num={resumo.vendidas} label={t('historico.sold')} />
           </Card>
         </Aparece>
         <ChipRow valor={fRes} onSel={(v) => selRes(v as FiltroRes)}
-          ops={[['todas', 'Todas'], ['ok', 'ok'], ['bloqueio', 'bloqueio'], ['erro', 'erro'], ['parado', 'parado']]} />
+          ops={[['todas', t('historico.filter.todas')], ['ok', t('historico.filter.ok')], ['bloqueio', t('historico.filter.bloqueio')], ['erro', t('historico.filter.erro')], ['parado', t('historico.filter.parado')]]} />
         <ChipRow valor={periodo} onSel={(v) => selPer(v as Periodo)}
-          ops={[['tudo', 'Tudo'], ['7d', '7 dias'], ['30d', '30 dias']]} />
+          ops={[['tudo', t('historico.period.tudo')], ['7d', t('historico.period.7d')], ['30d', t('historico.period.30d')]]} />
       </View>
 
       <FlatList
@@ -103,25 +111,25 @@ export function HistoricoScreen() {
         data={filtrados}
         keyExtractor={(r) => r.id}
         contentContainerStyle={{ padding: 16, paddingTop: 18, gap: 8, paddingBottom: 24 }}
-        ListEmptyComponent={<Text style={styles.vazio}>Nenhuma raspagem nesse filtro.</Text>}
+        ListEmptyComponent={<Text style={styles.vazio}>{t('historico.empty')}</Text>}
         renderItem={({ item, index }) => {
-          const res = resultado(item);
+          const res = resultado(item, colors);
           const dur = fmtDur(item.duracao_s);
           return (
             <Aparece delay={Math.min(index, 8) * 40}>
               <Card style={{ gap: 6 }}>
                 <View style={styles.topoLinha}>
-                  <Text style={styles.titulo}>Raspagem{item.dry_run ? ' · simulação' : ''}</Text>
+                  <Text style={styles.titulo}>{t('historico.card.title')}{item.dry_run ? t('historico.card.sim') : ''}</Text>
                   <View style={[styles.badge, { borderColor: res.cor }]}>
                     <Ionicons name={res.icon} size={13} color={res.cor} />
-                    <Text style={[styles.badgeTxt, { color: res.cor }]}>{res.label}</Text>
+                    <Text style={[styles.badgeTxt, { color: res.cor }]}>{t(res.label)}</Text>
                   </View>
                 </View>
-                <Text style={styles.saldo}>{saldoTxt(item)}</Text>
+                <Text style={styles.saldo}>{saldoTxt(item, t)}</Text>
                 <View style={styles.rodape}>
                   <Text style={styles.meta}>{fmtData(item.ended_at)}</Text>
                   {dur ? <Text style={styles.meta}>· {dur}</Text> : null}
-                  {item.backfill ? <Text style={styles.metaFraco}>· importada</Text> : null}
+                  {item.backfill ? <Text style={styles.metaFraco}>· {t('historico.imported')}</Text> : null}
                 </View>
               </Card>
             </Aparece>
@@ -133,6 +141,8 @@ export function HistoricoScreen() {
 }
 
 function Bloco({ num, label }: { num: number; label: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View>
       <Text style={styles.resumoNum}>{num}</Text>
@@ -142,6 +152,8 @@ function Bloco({ num, label }: { num: number; label: string }) {
 }
 
 function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const scale = useRef(new Animated.Value(1)).current;
   const anima = (to: number) =>
     Animated.spring(scale, { toValue: to, useNativeDriver: true, friction: 6, tension: 140 }).start();
@@ -156,6 +168,8 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
 
 function ChipRow({ valor, onSel, ops }:
   { valor: string; onSel: (v: string) => void; ops: [string, string][] }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.chips}>
       {ops.map(([v, label]) => (
@@ -165,7 +179,7 @@ function ChipRow({ valor, onSel, ops }:
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10, gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

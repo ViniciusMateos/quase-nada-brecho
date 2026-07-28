@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 
 export type ItemMenu = {
   label: string;
@@ -20,6 +21,8 @@ export function MenuContexto({
   visible, x, y, onClose, itens,
 }: { visible: boolean; x: number; y: number; onClose: () => void; itens: ItemMenu[] }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const fade = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.85)).current;
   const [montado, setMontado] = useState(false);
@@ -72,7 +75,7 @@ export function MenuContexto({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   menu: {
     position: 'absolute', width: MENU_W, backgroundColor: colors.card2, borderRadius: 14,
     borderWidth: 1, borderColor: colors.border, paddingVertical: 4,

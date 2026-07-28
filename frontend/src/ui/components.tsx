@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 import { LoadingDog } from '@/ui/LoadingDog';
 
 // ── Pressável com press-scale + long-press que reporta a posição do dedo ──
@@ -32,6 +33,8 @@ export function Pressavel({
 export function Botao({
   title, onPress, cor, txtCor, disabled, loading,
 }: { title: string; onPress: () => void; cor?: string; txtCor?: string; disabled?: boolean; loading?: boolean }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const scale = useRef(new Animated.Value(1)).current;
   const anima = (to: number) =>
     Animated.spring(scale, { toValue: to, useNativeDriver: true, friction: 6, tension: 120 }).start();
@@ -54,6 +57,8 @@ export function Botao({
 }
 
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
@@ -75,6 +80,8 @@ export function CartaoTocavel({
 }
 
 export function Pill({ texto, cor }: { texto: string; cor: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.pill, { borderColor: cor }]}>
       <Text style={[styles.pillTxt, { color: cor }]}>{texto}</Text>
@@ -119,6 +126,8 @@ export function Pulsar({ children, ativo = true }: { children: React.ReactNode; 
 export function BarraProgresso({
   done, total, label,
 }: { done: number; total: number; label?: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const pct = total > 0 ? Math.min(1, Math.max(0, done / total)) : 0;
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -138,7 +147,7 @@ export function BarraProgresso({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   botao: { paddingVertical: 13, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center' },
   botaoTxt: { fontWeight: '700', fontSize: 15 },
   card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border },

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, RunInfo } from '@/lib/api';
-import { colors } from '@/theme';
+import { type Cores } from '@/theme';
+import { useTheme } from '@/theme-context';
 import { LoadingDog } from '@/ui/LoadingDog';
 import { interacaoBus } from '@/ui/interacaoBus';
 
@@ -20,6 +21,8 @@ const MARGEM = 10;    // distância das bordas quando cola na lateral
  */
 export function BarraScraperGlobal({ onAbrir }: { onAbrir?: (runId: string) => void }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const win = Dimensions.get('window');
   const [run, setRun] = useState<RunInfo | null>(null);
   const [modo, setModo] = useState<'barra' | 'bolha'>('barra');
@@ -219,7 +222,7 @@ export function BarraScraperGlobal({ onAbrir }: { onAbrir?: (runId: string) => v
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   barraWrap: { position: 'absolute', left: 12, right: 12 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card,

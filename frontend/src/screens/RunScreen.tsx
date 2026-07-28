@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, AppState, NativeScrollEvent, NativeSyntheticEvent, Pressable,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { api, logsWsUrl } from '@/lib/api';
-import { colors, statusCor } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
+import { type Cores, statusCor } from '@/theme';
 import { BarraProgresso, Botao, Pill, Pulsar } from '@/ui/components';
 import { LoadingDog } from '@/ui/LoadingDog';
 import type { Progresso } from '@/lib/api';
@@ -23,7 +25,7 @@ type Parsed =
   | { tipo: 'kv'; label: string; valor: string }
   | { tipo: 'texto'; hora: string; texto: string; cor: string; forte: boolean };
 
-function corEvento(nivel: string, resto: string): { cor: string; forte: boolean } {
+function corEvento(nivel: string, resto: string, colors: Cores): { cor: string; forte: boolean } {
   // eventos por peça do app: colore pelo rótulo do começo da linha
   if (resto.startsWith('VENDIDA')) return { cor: colors.ok, forte: true };
   if (resto.startsWith('NOVA')) return { cor: colors.laranja, forte: true };
@@ -48,7 +50,7 @@ function corEvento(nivel: string, resto: string): { cor: string; forte: boolean 
   return { cor, forte };
 }
 
-function parseLinha(raw: string): Parsed {
+function parseLinha(raw: string, colors: Cores): Parsed {
   if (raw.startsWith('[backend]')) {
     return { tipo: 'texto', hora: '', texto: raw.replace(/^\[backend\]\s*/, '• '), cor: colors.textoFraco, forte: false };
   }
@@ -67,12 +69,14 @@ function parseLinha(raw: string): Parsed {
   const kv = resto.match(/^(.+?)\s*[.·]{2,}\s*(.+)$/);
   if (kv) return { tipo: 'kv', label: kv[1].trim(), valor: kv[2].trim() };
 
-  const { cor, forte } = corEvento(nivel, resto);
+  const { cor, forte } = corEvento(nivel, resto, colors);
   return { tipo: 'texto', hora, texto: resto, cor, forte };
 }
 
 function LogLinha({ raw, onCopiar }: { raw: string; onCopiar: (t: string) => void }) {
-  const p = parseLinha(raw);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const p = parseLinha(raw, colors);
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
@@ -114,7 +118,12 @@ function parseProgresso(txt: string): Progresso | null {
   return { done: parseInt(m[1], 10), total: parseInt(m[2], 10), label: m[3].trim() };
 }
 
+const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro'];
+
 export function RunScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { runId } = useRoute<Rt>().params;
   const [linhas, setLinhas] = useState<string[]>([]);
   const [status, setStatus] = useState('rodando');
@@ -205,22 +214,23 @@ export function RunScreen() {
   }
 
   const rodando = ['rodando', 'iniciando'].includes(status);
+  const statusTxt = STATUS_RUN.includes(status) ? t(`run.status.${status}`) : status;
 
   return (
     <View style={styles.tela}>
       <View style={styles.topo}>
         <Pulsar ativo={rodando}>
-          <Pill texto={status} cor={statusCor[status] ?? colors.textoFraco} />
+          <Pill texto={statusTxt} cor={statusCor(colors)[status] ?? colors.textoFraco} />
         </Pulsar>
         <View style={styles.topoAcoes}>
           {linhas.length > 0 && (
             <TouchableOpacity style={styles.copiarBtn} hitSlop={8}
-              onPress={() => copiar(linhas.join('\n'), 'log copiado')}>
+              onPress={() => copiar(linhas.join('\n'), t('run.copied.log'))}>
               <Ionicons name="copy-outline" size={16} color={colors.texto} />
-              <Text style={styles.copiarTxt}>copiar log</Text>
+              <Text style={styles.copiarTxt}>{t('run.copyLog')}</Text>
             </TouchableOpacity>
           )}
-          {rodando && <Botao title="Parar" cor={colors.erro} txtCor="#fff" onPress={parar} loading={parando} />}
+          {rodando && <Botao title={t('run.stop')} cor={colors.erro} txtCor="#fff" onPress={parar} loading={parando} />}
         </View>
       </View>
       {progresso && progresso.total > 0 && (
@@ -231,7 +241,7 @@ export function RunScreen() {
       {conectando && linhas.length === 0 ? (
         <View style={[styles.logBox, styles.loadingBox, { marginBottom: insets.bottom + 12 }]}>
           <LoadingDog size={56} />
-          <Text style={styles.loadingTxt}>Carregando logs…</Text>
+          <Text style={styles.loadingTxt}>{t('run.loading')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -242,7 +252,7 @@ export function RunScreen() {
           scrollEventThrottle={32}
           onContentSizeChange={() => { if (atBottomRef.current) scrollRef.current?.scrollToEnd({ animated: true }); }}>
           {linhas.map((l, i) => (
-            <LogLinha key={i} raw={l} onCopiar={(t) => copiar(t, 'linha copiada')} />
+            <LogLinha key={i} raw={l} onCopiar={(txt) => copiar(txt, t('run.copied.line'))} />
           ))}
         </ScrollView>
       )}
@@ -263,14 +273,14 @@ export function RunScreen() {
           ],
         }]}>
         <TouchableOpacity style={styles.voltarBtn} onPress={irAoFinal} activeOpacity={0.85}>
-          <Text style={styles.voltarTxt}>↓ Ir ao final</Text>
+          <Text style={styles.voltarTxt}>{t('run.toEnd')}</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
   topoAcoes: { flexDirection: 'row', alignItems: 'center', gap: 12 },

@@ -1,11 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, DropResumo } from '@/lib/api';
-import { colors, statusDrop } from '@/theme';
+import { type Cores, statusDrop } from '@/theme';
+import { useTheme } from '@/theme-context';
+import { useI18n, t as tr } from '@/i18n';
 import { Aparece, Card, Pill, Pressavel } from '@/ui/components';
 import { MenuContexto } from '@/ui/MenuContexto';
 import { LoadingDog, TelaCarregando } from '@/ui/LoadingDog';
@@ -17,7 +19,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 // data sempre DD/MM/AAAA
 export function fmtData(iso: string | null) {
   const m = (iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : 'sem data';
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : tr('drops.noDate');
 }
 function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
@@ -25,6 +27,9 @@ function brl(n: number) {
 }
 
 export function DropsScreen() {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const [drops, setDrops] = useState<DropResumo[] | null>(null);
@@ -46,7 +51,7 @@ export function DropsScreen() {
       const r = await api.listDropsTodos();
       setDrops(r.drops);
       const novo = r.drops.find((x) => x.tipo === 'manual' && x.id === d.id);
-      nav.navigate('DropDetail', { dropId: d.id, nome: novo ? `Drop ${novo.numero}` : 'Novo drop' });
+      nav.navigate('DropDetail', { dropId: d.id, nome: novo ? `Drop ${novo.numero}` : t('drops.newDrop') });
     } catch {} finally { setCriando(false); }
   }
 
@@ -58,10 +63,10 @@ export function DropsScreen() {
   function excluir(d: DropResumo) {
     setMenu(null);
     if (d.id == null) return;
-    Alert.alert(`Excluir Drop ${d.numero}`, 'As peças voltam pra "sem drop". Confirma?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('drops.deleteTitle', { n: d.numero }), t('drops.deleteMsg'), [
+      { text: t('drops.cancel'), style: 'cancel' },
       {
-        text: 'Excluir', style: 'destructive',
+        text: t('drops.delete'), style: 'destructive',
         onPress: async () => {
           setApagando(d.id!);
           try { await api.delDrop(d.id!); await carregar(); } catch {}
@@ -83,7 +88,7 @@ export function DropsScreen() {
         {...scrollProps}
         ListHeaderComponent={spacerEl}
         ListEmptyComponent={
-          <Text style={styles.vazio}>Nenhum drop ainda. Rode o Sincronizar pra puxar o histórico do Insta, ou crie um rascunho no +.</Text>
+          <Text style={styles.vazio}>{t('drops.empty')}</Text>
         }
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 8) * 40}>
@@ -104,8 +109,8 @@ export function DropsScreen() {
       <MenuContexto
         visible={!!menu} x={menu?.x ?? 0} y={menu?.y ?? 0} onClose={() => setMenu(null)}
         itens={menu ? [
-          { label: 'Editar', icon: 'create-outline', onPress: () => { const m = menu; setMenu(null); nav.navigate('DropDetail', { dropId: m.drop.id!, nome: `Drop ${m.drop.numero}` }); } },
-          { label: 'Excluir', icon: 'trash-outline', cor: colors.erro, onPress: () => excluir(menu.drop) },
+          { label: t('drops.edit'), icon: 'create-outline', onPress: () => { const m = menu; setMenu(null); nav.navigate('DropDetail', { dropId: m.drop.id!, nome: `Drop ${m.drop.numero}` }); } },
+          { label: t('drops.delete'), icon: 'trash-outline', cor: colors.erro, onPress: () => excluir(menu.drop) },
         ] : []}
       />
     </View>
@@ -114,8 +119,12 @@ export function DropsScreen() {
 
 function DropCard({ drop, onPress, onLongPress, apagando }:
   { drop: DropResumo; onPress: () => void; onLongPress?: (x: number, y: number) => void; apagando?: boolean }) {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const rascunho = drop.status === 'rascunho';
-  const st = statusDrop[drop.status] ?? statusDrop.rascunho;
+  const mapStatus = statusDrop(colors);
+  const st = mapStatus[drop.status] ?? mapStatus.rascunho;
 
   return (
     <Pressavel onPress={onPress} onLongPress={onLongPress}>
@@ -127,14 +136,14 @@ function DropCard({ drop, onPress, onLongPress, apagando }:
               <Ionicons name={drop.tipo === 'historico' ? 'logo-instagram' : 'calendar-outline'}
                 size={13} color={colors.textoFraco} />
               <Text style={styles.sub}>
-                {drop.tipo === 'historico' ? `postado ${fmtData(drop.data)}` : fmtData(drop.data)}
+                {drop.tipo === 'historico' ? t('drops.postedOn', { d: fmtData(drop.data) }) : fmtData(drop.data)}
               </Text>
             </View>
           </View>
-          {drop.sold_out ? (
+          {drop.sold_out && drop.status === 'publicado' ? (
             <View style={styles.esgotado}>
               <Ionicons name="checkmark-circle" size={22} color={colors.marca} />
-              <Text style={styles.esgotadoTxt}>esgotado</Text>
+              <Text style={styles.esgotadoTxt}>{t('drops.soldOut')}</Text>
             </View>
           ) : (
             <Pill texto={st.label} cor={st.cor} />
@@ -142,13 +151,13 @@ function DropCard({ drop, onPress, onLongPress, apagando }:
         </View>
 
         <View style={styles.saldo}>
-          <Linha label="Peças" valor={`${drop.vendidas}/${drop.qtd_pecas} vendidas`} />
-          <Linha label="Faturamento" valor={brl(drop.faturamento)} cor={colors.ok} />
+          <Linha label={t('drops.pieces')} valor={t('drops.soldCount', { sold: drop.vendidas, total: drop.qtd_pecas })} />
+          <Linha label={t('drops.revenue')} valor={brl(drop.faturamento)} cor={colors.ok} />
           {drop.disponiveis > 0 && (
-            <Linha label="Projeção (se vender tudo)" valor={brl(drop.projecao)} cor={colors.marca} />
+            <Linha label={t('drops.projection')} valor={brl(drop.projecao)} cor={colors.marca} />
           )}
-          <Linha label="Gasto do drop" valor={brl(drop.gasto)} cor={colors.textoFraco} />
-          <Linha label="Lucro líquido" valor={brl(drop.lucro)} cor={colors.marca} forte />
+          <Linha label={t('drops.spent')} valor={brl(drop.gasto)} cor={colors.textoFraco} />
+          <Linha label={t('drops.profit')} valor={brl(drop.lucro)} cor={colors.marca} forte />
         </View>
         {apagando && (
           <View style={styles.apagandoOverlay}>
@@ -161,6 +170,8 @@ function DropCard({ drop, onPress, onLongPress, apagando }:
 }
 
 function Linha({ label, valor, cor, forte }: { label: string; valor: string; cor?: string; forte?: boolean }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.linha}>
       <Text style={styles.linhaLabel}>{label}</Text>
@@ -169,7 +180,7 @@ function Linha({ label, valor, cor, forte }: { label: string; valor: string; cor
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   cta: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.marca, borderRadius: 14, padding: 16, marginBottom: 4 },
   ctaTxt: { flex: 1, color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
