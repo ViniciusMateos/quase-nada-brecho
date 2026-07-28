@@ -1,5 +1,6 @@
 import { baseUrl, http } from '@/lib/apiClient';
 import { getToken } from '@/lib/tokenStorage';
+import { getLang } from '@/i18n';
 import { env } from '@/config/env';
 
 export type Peca = {
@@ -116,8 +117,8 @@ export const api = {
   delDrop: (id: number) => http.del(`/drops/${id}`),
   setPecasDrop: (id: number, peca_ids: number[]) => http.put<DropDetalhe>(`/drops/${id}/pecas`, { peca_ids }),
 
-  // scraper / runs
-  startRun: (params: Record<string, unknown>) => http.post<RunInfo>('/runs', params),
+  // scraper / runs — manda o idioma do app pras notificações saírem em PT/EN
+  startRun: (params: Record<string, unknown>) => http.post<RunInfo>('/runs', { ...params, lang: getLang() }),
   listRuns: () => http.get<RunInfo[]>('/runs'),
   getRunsHistorico: () => http.get<RunHistorico[]>('/runs/history'),
   getRun: (id: string) => http.get<RunDetail>(`/runs/${id}`),
@@ -125,7 +126,7 @@ export const api = {
   setLiveActivity: (runId: string, token: string, bundle?: string) =>
     http.post(`/runs/${runId}/liveactivity`, { token, bundle }),
   importarPlanilha: () => http.post<ImportStats>('/scraper/importar'),
-  connectInstagram: (cookies: IgCookie[]) => http.post<ConnectResult>('/instagram/session', { cookies }),
+  connectInstagram: (cookies: IgCookie[]) => http.post<ConnectResult>('/instagram/session', { cookies, lang: getLang() }),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),
 };
 

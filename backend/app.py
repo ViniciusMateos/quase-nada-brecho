@@ -248,7 +248,7 @@ async def conectar_instagram(payload: dict):
     if not any(str(c.get("name")) == "sessionid" for c in cookies):
         raise HTTPException(400, "cookies sem 'sessionid' — sessão não está logada")
     arquivo = scraper.salvar_cookies(cookies)
-    run = await mgr.start({"import_cookies": arquivo})
+    run = await mgr.start({"import_cookies": arquivo, "lang": payload.get("lang") or "pt"})
     return {"runs": [{"id": run.id}]}
 
 

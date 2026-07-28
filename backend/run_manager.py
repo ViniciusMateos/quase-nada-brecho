@@ -50,30 +50,56 @@ def _parse_saldo(linha):
     return d or None
 
 
-def _proc_info(params):
-    """Textos de exibição por TIPO de processo (raspagem do brechó x conectar Instagram).
-    Usado no título da Live Activity / footer e nas notificações começou/terminou/parou."""
-    if (params or {}).get("import_cookies"):
-        return {
+_TEXTOS = {
+    "raspagem": {
+        "pt": {
+            "titulo": "Raspando o brechó",
+            "inicio": ("Raspando o brechó", "Começando a descer o feed… te mostro o progresso."),
+            "fim_ok": ("Brechó atualizado", "Raspagem concluída e planilha sincronizada."),
+            "fim_erro": ("Deu ruim", "O scraper do brechó parou com erro."),
+            "fim_parado": ("Parado", "O scraper do brechó foi parado."),
+        },
+        "en": {
+            "titulo": "Scraping the thrift",
+            "inicio": ("Scraping the thrift", "Starting to scroll the feed… I'll show the progress."),
+            "fim_ok": ("Thrift updated", "Scrape done and sheet synced."),
+            "fim_erro": ("Something went wrong", "The thrift scraper stopped with an error."),
+            "fim_parado": ("Stopped", "The thrift scraper was stopped."),
+        },
+    },
+    "conectar": {
+        "pt": {
             "titulo": "Conectando Instagram",
             "inicio": ("Conectando Instagram", "Importando a sessão e validando o login…"),
             "fim_ok": ("Instagram conectado", "Sessão salva — já pode raspar o brechó."),
             "fim_erro": ("Deu ruim", "Não consegui conectar o Instagram."),
             "fim_parado": ("Parado", "A conexão do Instagram foi parada."),
-        }
-    return {
-        "titulo": "Raspando o brechó",
-        "inicio": ("Raspando o brechó", "Começando a descer o feed… te mostro o progresso."),
-        "fim_ok": ("Brechó atualizado", "Raspagem concluída e planilha sincronizada."),
-        "fim_erro": ("Deu ruim", "O scraper do brechó parou com erro."),
-        "fim_parado": ("Parado", "O scraper do brechó foi parado."),
-    }
+        },
+        "en": {
+            "titulo": "Connecting Instagram",
+            "inicio": ("Connecting Instagram", "Importing the session and checking the login…"),
+            "fim_ok": ("Instagram connected", "Session saved — you can scrape now."),
+            "fim_erro": ("Something went wrong", "Couldn't connect Instagram."),
+            "fim_parado": ("Stopped", "The Instagram connection was stopped."),
+        },
+    },
+}
+
+
+def _proc_info(params, lang="pt"):
+    """Textos de exibição por TIPO de processo (raspagem x conectar Instagram) e IDIOMA.
+    O app manda o idioma selecionado em params['lang'] (pt/en); usado no título da Live
+    Activity / footer e nas notificações começou/terminou/parou."""
+    tipo = "conectar" if (params or {}).get("import_cookies") else "raspagem"
+    idioma = lang if lang in ("pt", "en") else "pt"
+    return _TEXTOS[tipo][idioma]
 
 
 class Run:
     def __init__(self, params):
         self.id = f"run-{next(_counter)}"
         self.params = params or {}
+        self.lang = self.params.get("lang") or "pt"   # idioma do app (notificações/LA)
         self.status = "iniciando"      # iniciando | rodando | finalizado | parado | erro
         self.started_at = time.time()
         self.ended_at = None
@@ -92,7 +118,7 @@ class Run:
         self._ult_la_t = 0.0
         self._ult_la_status = None      # última linha de status refletida na LA (fase de abertura)
         self._ult_la_status_t = 0.0
-        self.titulo = _proc_info(self.params)["titulo"]   # nome do processo (LA/footer)
+        self.titulo = _proc_info(self.params, self.lang)["titulo"]   # nome do processo (LA/footer)
 
     def info(self):
         return {
@@ -211,7 +237,7 @@ class RunManager:
         })
 
     async def _push_inicio(self, run):
-        titulo, corpo = _proc_info(run.params)["inicio"]
+        titulo, corpo = _proc_info(run.params, run.lang)["inicio"]
         try:
             await asyncio.to_thread(
                 notify.enviar, titulo, corpo, {"type": "start", "runId": run.id})
@@ -283,7 +309,7 @@ class RunManager:
 
     async def _push_fim(self, run):
         """Notifica o celular quando a run termina (raspagem OU conexão do Insta)."""
-        info = _proc_info(run.params)
+        info = _proc_info(run.params, run.lang)
         # encerra a Live Activity (a barra some do lock screen alguns segundos depois)
         if run.la_token:
             p = run.progress or {}
