@@ -24,8 +24,10 @@ quase-nada-brecho/
 │       ├── screens/  Hub, Peças, Drops, DropDetail, Histórico, Dashboard,
 │       │             Sincronizar, Run (logs ao vivo), InstagramLogin, Settings
 │       ├── lib/      api + cliente axios + push
+│       ├── i18n/     traduções PT/EN (packs por domínio) + transição scramble
 │       ├── ui/       componentes (loader do cachorro, botões, cards, progresso)
-│       └── theme.ts  paleta laranja
+│       ├── theme.ts + theme-context  paletas dark/light + troca animada (fade)
+│       └── constants/otaVersion  contador OTA (sobe a cada eas update)
 └── workers/
     └── brecho-tracker/   scraper Playwright do @brechoquasenadaa (movido do Bots)
 ```
@@ -70,6 +72,12 @@ quase-nada-brecho/
   Se as peças de um **drop manual** aparecem no Insta, o app entende que o drop foi
   publicado: mantém as peças no drop, marca-o como **publicado** e **sincroniza a data**
   com o post.
+- **Configurações** (engrenagem no Hub) — **tema claro/escuro** (troca com um fade de
+  "cortina" no app inteiro) e **idioma PT/EN** (troca com a animação de embaralhar as
+  letras). As categorias traduzem por dicionário (pela 1ª palavra do nome) e o filtro
+  reordena alfabético pelo idioma ativo. As **notificações** também saem no idioma
+  escolhido (o app manda o idioma, o backend responde em PT/EN). No rodapé, o **contador
+  OTA** confirma qual bundle está rodando de fato.
 
 ### Fluxo do scraper
 
