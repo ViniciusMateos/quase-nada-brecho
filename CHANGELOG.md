@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0] — 2026-07-28
+
+### Adicionado
+- feat: **tema claro/escuro** no app inteiro, com troca animada (fade de "cortina" no driver nativo) e persistência
+- feat: **idioma PT/EN** com transição de embaralhar letras (scramble); categorias traduzidas por dicionário (pela 1ª palavra do nome) e filtro reordenado alfabético pelo idioma ativo
+- feat: **tela de Configurações** (engrenagem no Hub) com cards de tema e idioma
+- feat: **notificações em PT/EN** conforme o idioma selecionado no app (o app manda o idioma, o backend responde localizado)
+- feat: **contador OTA** no rodapé do Settings (sobe a cada `eas update` — prova de qual bundle está rodando de fato)
+
+### Corrigido
+- fix: scraper não reporta mais 0 posts como "finalizado" (raspagem incompleta mascarada de sucesso) — agora vira erro; o interceptador do feed colhe de mais endpoints além do graphql
+
+### Removido
+- chore: card de servidor (URL/token) do Settings — são fixos/embutidos no build
+
+### Notas
+- Sem mudança nativa: `runtimeVersion` segue em `1.0.0`; tudo entregue por OTA (frontend) + `scp` (backend/worker)
+
 ## [1.0.5] — 2026-07-26
 
 ### Corrigido
