@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Animated, Dimensions, FlatList, KeyboardAvoidingView, NativeScrollEvent,
-  NativeSyntheticEvent, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Alert, Animated, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, NativeScrollEvent,
+  NativeSyntheticEvent, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -146,7 +146,8 @@ export function CarrosselPecasScreen() {
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
         renderItem={({ item, index }) => (
-          <View style={{ width: W, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
+          <Pressable style={{ width: W, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}
+            onPress={() => Keyboard.dismiss()}>
             <View style={[styles.fotoWrap, { width: W - 32 }]}>
               <Image source={item} style={styles.foto} contentFit="cover" transition={120} cachePolicy="memory-disk" />
               <View style={styles.fotoAcoes}>
@@ -158,7 +159,7 @@ export function CarrosselPecasScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </Pressable>
         )}
       />
 

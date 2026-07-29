@@ -42,6 +42,32 @@ function pctStr(recebe: number, venda: number): string {
   return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
 }
 
+// ─── busca tolerante: sem acento, minúsculo, pontuação vira espaço ───
+// range U+0300–U+036F = as marcas de acento que o NFD separa da letra base
+const RE_ACENTO = /[̀-ͯ]/g;
+function normBusca(s: string): string {
+  return (s || '')
+    .normalize('NFD').replace(RE_ACENTO, '')   // "camisá"→"camisa", "não"→"nao"
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')               // pontuação/símbolo vira espaço
+    .trim();
+}
+// as letras de `alvo` aparecem em ordem dentro de `texto` (tolera letra faltando/trocada)
+function subsequencia(alvo: string, texto: string): boolean {
+  let i = 0;
+  for (let j = 0; j < texto.length && i < alvo.length; j++) if (texto[j] === alvo[i]) i++;
+  return i === alvo.length;
+}
+// casa se CADA palavra da busca aparece no texto (ordem livre — "nike camisa" acha "camisa nike");
+// palavra com 4+ letras ainda casa por subsequência (typo/letra a menos: "camsa" acha "camisa")
+function casaBusca(texto: string, busca: string): boolean {
+  const alvo = normBusca(texto);
+  const semEspaco = alvo.replace(/ /g, '');
+  const termos = normBusca(busca).split(' ').filter(Boolean);
+  if (!termos.length) return true;
+  return termos.every((termo) => alvo.includes(termo) || (termo.length >= 4 && subsequencia(termo, semEspaco)));
+}
+
 export function PecasScreen() {
   const { colors } = useTheme();
   const { t, lang } = useI18n();
@@ -144,7 +170,8 @@ export function PecasScreen() {
       if (filtro === 'disponiveis' && p.vendida) return false;
       if (filtro === 'sem-drop' && p.drop_id != null) return false;
       if (categoria && (p.item ?? '').trim() !== categoria) return false;
-      if (b && !`${p.nome ?? ''} ${p.item ?? ''}`.toLowerCase().includes(b)) return false;
+      // busca tolerante (sem acento, ordem livre, typo): nome + categoria (PT e traduzida)
+      if (b && !casaBusca(`${p.nome ?? ''} ${p.item ?? ''} ${traduzCategoria(p.item ?? '', lang)}`, b)) return false;
       return true;
     });
     // ordena por recência (data do post; peça manual sem data = mais recente), desempata por id.
@@ -157,7 +184,7 @@ export function PecasScreen() {
     });
     if (ordem === 'recente') arr.reverse();
     return arr;
-  }, [pecas, filtro, busca, ordem, categoria]);
+  }, [pecas, filtro, busca, ordem, categoria, lang]);
 
   if (!pecas) return <TelaCarregando />;
 
@@ -207,6 +234,8 @@ export function PecasScreen() {
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: insets.bottom + 24, gap: 8 }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         {...scrollProps}
         ListHeaderComponent={spacerEl}
         ListEmptyComponent={<Text style={styles.vazio}>{t('pecas.empty')}</Text>}
