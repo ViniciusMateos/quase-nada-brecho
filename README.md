@@ -21,8 +21,8 @@ quase-nada-brecho/
 │   └── settings.py   config (token, paths, worker)
 ├── frontend/         Expo / React Native (mesmo esqueleto dos outros apps QN)
 │   └── src/
-│       ├── screens/  Hub, Peças, Drops, DropDetail, Histórico, Dashboard,
-│       │             Sincronizar, Run (logs ao vivo), InstagramLogin, Settings
+│       ├── screens/  Hub, Peças, Drops, DropDetail, Histórico, Dashboard, Calendário,
+│       │             Sincronizar, Run (logs ao vivo), Conta do Instagram, InstagramLogin, Settings
 │       ├── lib/      api + cliente axios + push
 │       ├── i18n/     traduções PT/EN (packs por domínio) + transição scramble
 │       ├── ui/       componentes (loader do cachorro, botões, cards, progresso)
@@ -38,8 +38,10 @@ quase-nada-brecho/
   tamanho, **medidas** (largura/comprimento + especiais com **nome livre** — circunferência,
   palmilha, manga… entram no template), condição (`x/10`), observação e compra/venda; marca
   vendida; filtra por disponível/vendida/sem-drop **e por categoria**, com ordenação
-  recente↔antiga. Mostra o **drop** da peça e permite **entrar nele** (pelo editor ou
-  segurando a peça). O editor é um componente único, compartilhado com a tela de Drops.
+  recente↔antiga. A **busca é tolerante**: ignora acento, aceita as palavras em qualquer
+  ordem e aguenta typo leve (casa por nome e categoria, em PT e traduzida). Mostra o **drop**
+  da peça e permite **entrar nele** (pelo editor ou segurando a peça). O editor é um
+  componente único, compartilhado com a tela de Drops, organizado em seções.
 - **Consignado** — marca a peça como de terceiro + quanto fica pra você, escolhendo entre
   **% da venda** ou **valor fixo (R$)**; os relatórios (faturamento, lucro, dashboard, saldo
   do drop) contam **só a sua parte**, não o valor cheio (e mostram a % equivalente no fixo).
@@ -55,6 +57,10 @@ quase-nada-brecho/
 - **Dashboard** — faturamento, lucro, ROI, ticket médio, estoque e quebra por drop/categoria
   (peças consignadas entram só pela % que fica pra você); as linhas de categoria são atalho
   pra tela de peças já filtrada.
+- **Calendário de vendas** — calendário navegável por mês que mostra as **vendas por dia** e,
+  no topo, **faturamento, lucro, margem e ROI** do mês. Cada peça vendida guarda a **data da
+  venda** (editável; quando é estimada — backfill/scraper — pede confirmação); tocar numa
+  venda abre a peça pra editar.
 - **Histórico** — cada raspagem vira um registro com o que mudou (atualizadas, relacionadas,
   vendidas) e um log por peça (NOVA/RELACIONADA/ATUALIZADA/VENDIDA), filtrável por período.
 - **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
@@ -81,7 +87,9 @@ quase-nada-brecho/
 
 ### Fluxo do scraper
 
-1. **Conectar Instagram** (uma vez) — loga na conta pela WebView; a sessão é salva no servidor.
+1. **Conectar Instagram** — em *Conta do Instagram* dá pra salvar login+senha **no aparelho**
+   (SecureStore, nunca no servidor) e reconectar num toque: o app preenche e loga sozinho na
+   WebView (resolvendo o checkpoint/confirmar email ali mesmo) e captura a sessão pro servidor.
 2. **Atualizar agora** — dispara a raspagem; acompanha os logs em tempo real.
 3. Ao fim, o backend reconcilia o que foi raspado com o acervo do app e re-espelha a planilha.
 
