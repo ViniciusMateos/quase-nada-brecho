@@ -30,9 +30,11 @@ export type Peca = {
   origem: string;
   code: string | null;
   postado_em: string | null;
+  vendida_em: string | null;      // data da venda (YYYY-MM-DD) — pro calendário
+  venda_estimada: boolean;        // data chutada (backfill/scraper) → pede confirmação
 };
 export type PecaCampos = Partial<Pick<Peca,
-  'nome' | 'item' | 'tamanho' | 'largura' | 'comprimento' | 'medida' | 'observacao' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id' | 'consignado' | 'consig_pct' | 'consig_tipo' | 'consig_valor' | 'so_manual' | 'template'>>;
+  'nome' | 'item' | 'tamanho' | 'largura' | 'comprimento' | 'medida' | 'observacao' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id' | 'consignado' | 'consig_pct' | 'consig_tipo' | 'consig_valor' | 'so_manual' | 'template' | 'vendida_em' | 'venda_estimada'>>;
 
 export type Drop = {
   id: number;

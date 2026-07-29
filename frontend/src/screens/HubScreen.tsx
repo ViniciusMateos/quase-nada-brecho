@@ -82,6 +82,10 @@ export function HubScreen() {
         <MenuCard colors={colors} styles={styles} icone="stats-chart" titulo={t('hub.dashboard')}
           sub={t('hub.dashboard.sub')} onPress={() => nav.navigate('Dashboard')} />
       </Aparece>
+      <Aparece delay={150}>
+        <MenuCard colors={colors} styles={styles} icone="calendar" titulo={t('hub.calendar')}
+          sub={t('hub.calendar.sub')} onPress={() => nav.navigate('Calendario')} />
+      </Aparece>
       <Aparece delay={160}>
         <MenuCard colors={colors} styles={styles} icone="sync" titulo={t('hub.sync')}
           sub={t('hub.sync.sub')} onPress={() => nav.navigate('Sincronizar')} />

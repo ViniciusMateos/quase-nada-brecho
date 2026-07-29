@@ -6,6 +6,7 @@ mas agora lendo do SQLite em vez da planilha do scraper.
 """
 import json
 from collections import defaultdict
+from datetime import date
 
 from db import conn, row, rows
 
@@ -28,7 +29,7 @@ def _medida_json_circ(circ):
 
 EDITAVEIS = ("nome", "item", "tamanho", "largura", "comprimento", "medida", "observacao",
              "condicao", "compra", "venda", "vendida", "drop_id", "consignado", "consig_pct",
-             "consig_tipo", "consig_valor", "so_manual", "template")
+             "consig_tipo", "consig_valor", "so_manual", "template", "vendida_em", "venda_estimada")
 
 
 def _num(v):
@@ -83,6 +84,10 @@ def _coagir(campos):
             out[k] = _num(v) if v not in (None, "", "null") else None
         elif k == "consig_tipo":
             out[k] = "valor" if str(v).strip().lower() == "valor" else "pct"
+        elif k == "vendida_em":
+            out[k] = (str(v)[:10] or None) if v not in (None, "", "null") else None
+        elif k == "venda_estimada":
+            out[k] = 1 if (v is True or str(v).strip().lower() in ("sim", "true", "1")) else 0
         else:
             out[k] = v
     return out
@@ -121,6 +126,8 @@ def _peca_dict(r):
         "code": r["code"] if "code" in r.keys() else None,
         "num": r["num"] if "num" in r.keys() else None,
         "postado_em": r["postado_em"] if "postado_em" in r.keys() else None,
+        "vendida_em": r["vendida_em"] if "vendida_em" in r.keys() else None,
+        "venda_estimada": bool(r["venda_estimada"]) if "venda_estimada" in r.keys() else False,
     }
 
 
@@ -173,6 +180,14 @@ def add(campos):
 
 def editar(peca_id, campos):
     d = _coagir(campos)
+    # data da venda: marcou vendida sem informar data → assume hoje (data real, não estimada);
+    # desmarcou vendida → limpa a data.
+    if d.get("vendida") == 1 and "vendida_em" not in d:
+        d["vendida_em"] = date.today().isoformat()
+        d.setdefault("venda_estimada", 0)
+    if d.get("vendida") == 0:
+        d["vendida_em"] = None
+        d["venda_estimada"] = 0
     # peça do scraper já tem o drop dela no Insta — não deixa jogar num drop manual
     if "drop_id" in d:
         with conn() as c:
@@ -312,6 +327,9 @@ def upsert_scraper(items, preview=False):
                     continue   # peça travada como manual: scraper não atualiza nem duplica
                 virou_vendida = bool(vend_nova and not alvo["vendida"])
                 mud = _mudancas(alvo, campos, v_insta)
+                if virou_vendida:   # carimba a data da venda (estimada = dia da detecção; confirmável no app)
+                    campos["vendida_em"] = date.today().isoformat()
+                    campos["venda_estimada"] = 1
                 sets = ", ".join(f"{k} = :{k}" for k in campos)
                 # atualiza; se casou uma peça MANUAL (pelo num), promove a scraper e dá o code
                 c.execute(f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
@@ -347,6 +365,9 @@ def upsert_scraper(items, preview=False):
             if match:
                 virou_vendida = bool(vend_nova and not match["vendida"])
                 mud = _mudancas(match, campos, v_insta)
+                if virou_vendida:   # carimba a data da venda (estimada = dia da detecção)
+                    campos["vendida_em"] = date.today().isoformat()
+                    campos["venda_estimada"] = 1
                 sets = ", ".join(f"{k} = :{k}" for k in campos)
                 if match["drop_id"] is not None:
                     c.execute(

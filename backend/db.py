@@ -61,6 +61,8 @@ _MIGRACOES = [
     ("pecas", "so_manual", "INTEGER NOT NULL DEFAULT 0"),  # peça travada: o scraper NÃO atualiza
     ("pecas", "template", "TEXT"),  # legenda do post customizada à mão (senão gera automático no app)
     ("pecas", "num", "INTEGER"),   # código sequencial da peça (#p<num> na legenda, chave de match)
+    ("pecas", "vendida_em", "TEXT"),   # data da venda (YYYY-MM-DD) — pro calendário/faturamento por mês
+    ("pecas", "venda_estimada", "INTEGER NOT NULL DEFAULT 0"),  # 1 = data chutada (backfill/scraper), pede confirmação
 ]
 
 
@@ -78,6 +80,12 @@ def init_db():
                 start=base + 1):
             c.execute("UPDATE pecas SET num = ? WHERE id = ?", (i, r["id"]))
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pecas_num ON pecas(num) WHERE num IS NOT NULL")
+        # backfill da data de venda: vendas antigas não têm data exata guardada, então
+        # estima pela data do post (fallback: criação) e marca como estimada (venda_estimada=1).
+        # Daqui pra frente a data vem certinha (manual no editor / scraper carimba na detecção).
+        c.execute(
+            "UPDATE pecas SET vendida_em = COALESCE(substr(postado_em,1,10), substr(criado_em,1,10)), "
+            "venda_estimada = 1 WHERE vendida = 1 AND (vendida_em IS NULL OR vendida_em = '')")
 
 
 @contextmanager

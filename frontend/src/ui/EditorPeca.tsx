@@ -15,6 +15,13 @@ import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
 import { Botao } from '@/ui/components';
 import { BottomSheet } from '@/ui/BottomSheet';
+import { CampoData } from '@/ui/CampoData';
+
+// data de hoje em YYYY-MM-DD (local, não UTC)
+const hojeISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -66,13 +73,14 @@ type Form = {
   consignado: boolean; consigTipo: 'pct' | 'valor'; consigPct: string; consigValor: string; soManual: boolean;
   template: string; codigo: number | null;
   drop_id: number | null; imagem_url: string | null; fotoLocal: string | null; origem: string; code: string | null;
-  postado_em: string | null;
+  postado_em: string | null; vendidaEm: string; vendaEstimada: boolean;
 };
 const FORM_VAZIO: Form = {
   id: null, nome: '', item: '', tamanho: '', largura: '', comprimento: '', medidas: [], observacao: '',
   condicao: '', compra: '', venda: '', vendida: false, consignado: false, consigTipo: 'pct', consigPct: '',
   consigValor: '', soManual: false, template: '', codigo: null,
   drop_id: null, imagem_url: null, fotoLocal: null, origem: 'manual', code: null, postado_em: null,
+  vendidaEm: '', vendaEstimada: false,
 };
 function paraForm(p: Peca): Form {
   return {
@@ -87,6 +95,7 @@ function paraForm(p: Peca): Form {
     soManual: p.so_manual, template: p.template ?? '', codigo: p.num ?? null,
     drop_id: p.drop_id, imagem_url: p.imagem_url, fotoLocal: null,
     origem: p.origem ?? 'manual', code: p.code, postado_em: p.postado_em,
+    vendidaEm: p.vendida_em ?? '', vendaEstimada: p.venda_estimada,
   };
 }
 
@@ -201,6 +210,8 @@ export function EditorPeca({
       medida: serializeMedidas(form.medidas), observacao: form.observacao.trim(),
       condicao: form.condicao.trim(), compra: num(form.compra), venda: num(form.venda),
       vendida: form.vendida, drop_id: form.drop_id,
+      vendida_em: form.vendida ? (form.vendidaEm || null) : null,
+      venda_estimada: form.vendaEstimada,
       consignado: form.consignado, consig_tipo: form.consigTipo,
       consig_pct: form.consignado && form.consigTipo === 'pct' ? num(form.consigPct) : null,
       consig_valor: form.consignado && form.consigTipo === 'valor' ? num(form.consigValor) : null,
@@ -251,8 +262,8 @@ export function EditorPeca({
         </TouchableOpacity>
       </View>
       {form && (
-        <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
+        <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
           <TouchableOpacity style={styles.fotoBox} onPress={pedirFoto} activeOpacity={0.85}>
             {previa ? (
               <Image source={previa} style={styles.fotoPreview} contentFit="cover" transition={150} />
@@ -267,6 +278,7 @@ export function EditorPeca({
             </View>
           </TouchableOpacity>
 
+          <Secao icon="pricetag-outline" titulo={t('editor.secItem')} styles={styles} colors={colors} />
           <Campo label={t('editor.name')} valor={form.nome} onChange={(v) => {
             // categoria = 1ª palavra do nome, mas só enquanto não for editada na mão
             const nova = v.trim().split(/\s+/)[0] || '';
@@ -280,12 +292,16 @@ export function EditorPeca({
             <TextoScramble ativo text={`→ ${traduzCategoria(form.item, lang)}`}
               style={styles.categoriaEn} numberOfLines={1} />
           ) : null}
+
+          <Secao icon="cash-outline" titulo={t('editor.secPrice')} styles={styles} colors={colors} />
           <View style={styles.dupla}>
             <Campo label={t('editor.cost')} valor={form.compra} numerico placeholder="0" style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, compra: v })} />
             <Campo label={t('editor.sale')} valor={form.venda} numerico placeholder="0" style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, venda: v })} />
           </View>
+
+          <Secao icon="resize-outline" titulo={t('editor.secDetails')} styles={styles} colors={colors} />
           <View style={styles.dupla}>
             <Campo label={t('editor.size')} valor={form.tamanho} style={{ flex: 1 }}
               onChange={(v) => setForm({ ...form, tamanho: v })} />
@@ -361,6 +377,7 @@ export function EditorPeca({
           <Campo label={t('editor.notes')} valor={form.observacao} multiline
             placeholder={t('editor.notesPh')} onChange={(v) => setForm({ ...form, observacao: v })} />
 
+          <Secao icon="albums-outline" titulo={t('editor.secOrg')} styles={styles} colors={colors} />
           {form.origem === 'scraper' ? (
             <>
               <View style={styles.notaScraper}>
@@ -410,10 +427,42 @@ export function EditorPeca({
           )}
 
           <View style={styles.linhaBool}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.boolLabel}>{t('editor.manualLabel')}</Text>
+              <Text style={styles.boolSub}>{t('editor.manualSub')}</Text>
+            </View>
+            <Switch value={form.soManual} onValueChange={(v) => setForm({ ...form, soManual: v })}
+              trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
+          </View>
+
+          <Secao icon="checkmark-done-outline" titulo={t('editor.secSale')} styles={styles} colors={colors} />
+          <View style={styles.linhaBool}>
             <Text style={styles.boolLabel}>{t('editor.sold')}</Text>
-            <Switch value={form.vendida} onValueChange={(v) => setForm({ ...form, vendida: v })}
+            <Switch value={form.vendida} onValueChange={(v) => setForm({ ...form, vendida: v,
+              vendidaEm: v ? (form.vendidaEm || hojeISO()) : '', vendaEstimada: v ? form.vendaEstimada : false })}
               trackColor={{ true: colors.ok, false: colors.border }} thumbColor="#fff" />
           </View>
+          {form.vendida && (
+            <View style={{ gap: 8 }}>
+              <CampoData label={t('editor.soldOn')} valor={form.vendidaEm}
+                onChange={(v) => setForm({ ...form, vendidaEm: v, vendaEstimada: false })} />
+              {form.vendaEstimada ? (
+                <>
+                  <Text style={styles.estimadaHint}>{t('editor.soldEstimated')}</Text>
+                  <TouchableOpacity style={styles.confirmBtn} activeOpacity={0.85}
+                    onPress={() => setForm({ ...form, vendaEstimada: false })}>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.ok} />
+                    <Text style={styles.confirmBtnTxt}>{t('editor.confirmDate')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : form.vendidaEm ? (
+                <View style={styles.confirmadoRow}>
+                  <Ionicons name="checkmark-circle" size={15} color={colors.ok} />
+                  <Text style={styles.confirmadoTxt}>{t('editor.dateConfirmed')}</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
 
           <View style={styles.linhaBool}>
             <Text style={styles.boolLabel}>{t('editor.consignment')}</Text>
@@ -470,15 +519,7 @@ export function EditorPeca({
             </View>
           )}
 
-          <View style={styles.linhaBool}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.boolLabel}>{t('editor.manualLabel')}</Text>
-              <Text style={styles.boolSub}>{t('editor.manualSub')}</Text>
-            </View>
-            <Switch value={form.soManual} onValueChange={(v) => setForm({ ...form, soManual: v })}
-              trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
-          </View>
-
+          <Secao icon="document-text-outline" titulo={t('editor.secCaption')} styles={styles} colors={colors} />
           {/* template pra copiar/colar na hora de postar — editável nas peças manuais */}
           {(() => {
             const gerado = gerarTemplate(form);
@@ -541,6 +582,20 @@ function Campo({ label, valor, onChange, numerico, multiline, placeholder, style
   );
 }
 
+// Cabeçalho de seção do editor — agrupa os campos por assunto (peça, preço, venda…).
+function Secao({ icon, titulo, styles, colors }: {
+  icon: React.ComponentProps<typeof Ionicons>['name']; titulo: string;
+  styles: ReturnType<typeof makeStyles>; colors: Cores;
+}) {
+  return (
+    <View style={styles.secaoRow}>
+      <Ionicons name={icon} size={14} color={colors.marca} />
+      <Text style={styles.secaoTxt}>{titulo}</Text>
+      <View style={styles.secaoLinha} />
+    </View>
+  );
+}
+
 // Botão "Copiar" que vira "Copiado" (laranja escuro) por 2s, com animação.
 function BotaoCopiar({ texto }: { texto: string }) {
   const { colors } = useTheme();
@@ -587,6 +642,14 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   dupla: { flexDirection: 'row', gap: 12 },
   campoLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '600', marginBottom: 6 },
   categoriaEn: { color: colors.marca, fontSize: 12, fontWeight: '700', marginTop: -6, marginLeft: 2 },
+  estimadaHint: { color: colors.alerta, fontSize: 11, marginLeft: 2 },
+  secaoRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6, marginBottom: 2 },
+  secaoTxt: { color: colors.marca, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+  secaoLinha: { flex: 1, height: 1, backgroundColor: colors.border, marginLeft: 2 },
+  confirmBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.card2, borderRadius: 10, paddingVertical: 11, borderWidth: 1, borderColor: colors.ok },
+  confirmBtnTxt: { color: colors.ok, fontSize: 14, fontWeight: '800' },
+  confirmadoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 2 },
+  confirmadoTxt: { color: colors.ok, fontSize: 12, fontWeight: '700' },
   input: { backgroundColor: colors.card2, color: colors.texto, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border },
   inputMultiline: { minHeight: 72, paddingTop: 12 },
   condRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
