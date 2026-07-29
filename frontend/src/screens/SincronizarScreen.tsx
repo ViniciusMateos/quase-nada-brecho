@@ -77,7 +77,7 @@ export function SincronizarScreen() {
           <Text style={styles.titulo}>{t('sync.ig.title')}</Text>
           <Text style={styles.desc}>{t('sync.ig.desc')}</Text>
           <Botao title={t('sync.ig.connect')} cor={colors.marca} txtCor="#FFFFFF"
-            onPress={() => nav.navigate('InstagramLogin')} />
+            onPress={() => nav.navigate('ContaInstagram')} />
         </Card>
       </Aparece>
 
