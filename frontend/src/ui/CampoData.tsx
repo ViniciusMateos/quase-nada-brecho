@@ -3,13 +3,17 @@ import { Animated, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpaci
 import { Ionicons } from '@expo/vector-icons';
 import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
+import { useI18n } from '@/i18n';
 
 // Campo de data: dá pra digitar (DD/MM/AAAA, com máscara) OU tocar no calendário.
 // Guarda/entrega no formato ISO (AAAA-MM-DD) pro backend; mostra em DD/MM/AAAA.
 
-const WEEK = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+const WEEK_PT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const WEEK_EN = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const MESES_EN = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
 
 const p2 = (n: number) => String(n).padStart(2, '0');
 const toISO = (d: Date) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
@@ -42,6 +46,7 @@ export function CampoData({
   label, valor, onChange, placeholder,
 }: { label?: string; valor: string; onChange: (iso: string) => void; placeholder?: string }) {
   const { colors } = useTheme();
+  const { lang } = useI18n();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [texto, setTexto] = useState(isoToBR(valor));
   const [aberto, setAberto] = useState(false);
@@ -76,7 +81,7 @@ export function CampoData({
       <View style={styles.inputRow}>
         <TextInput
           value={texto} onChangeText={digitar} keyboardType="numeric" maxLength={10}
-          placeholder={placeholder || 'DD/MM/AAAA'} placeholderTextColor={colors.textoFraco}
+          placeholder={placeholder || (lang === 'en' ? 'DD/MM/YYYY' : 'DD/MM/AAAA')} placeholderTextColor={colors.textoFraco}
           style={styles.input} />
         <TouchableOpacity style={styles.calBtn} onPress={() => setAberto(true)} activeOpacity={0.8}>
           <Ionicons name="calendar" size={20} color="#FFFFFF" />
@@ -112,30 +117,39 @@ function grid(ano: number, mes: number) {
 
 function Calendario({ selecionada, onSelect }: { selecionada: Date | null; onSelect: (d: Date) => void }) {
   const { colors } = useTheme();
+  const { lang } = useI18n();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const WEEK = lang === 'en' ? WEEK_EN : WEEK_PT;
+  const MESES = lang === 'en' ? MESES_EN : MESES_PT;
   const hoje = new Date();
-  const [ano, setAno] = useState(selecionada ? selecionada.getFullYear() : hoje.getFullYear());
-  const [mes, setMes] = useState(selecionada ? selecionada.getMonth() : hoje.getMonth());
+  // mês+ano num estado só: o wrap (dez→jan) acontece DENTRO do updater, com o valor atual —
+  // assim cliques rápidos nunca deixam o mês passar de 0-11 (era isso que sumia o nome do mês).
+  const [ref, setRef] = useState({
+    ano: selecionada ? selecionada.getFullYear() : hoje.getFullYear(),
+    mes: selecionada ? selecionada.getMonth() : hoje.getMonth(),
+  });
+  const { ano, mes } = ref;
   const cells = useMemo(() => grid(ano, mes), [ano, mes]);
 
-  // desliza pro lado ao trocar de mês (avançar entra da direita, voltar da esquerda)
+  // desliza pro lado ao trocar de mês (avançar entra da direita, voltar da esquerda).
+  // Sem trava: igual ao calendário de vendas — clicou de novo, já vira o mês na hora.
   const slideX = useRef(new Animated.Value(0)).current;
   const gridOp = useRef(new Animated.Value(1)).current;
-  const animando = useRef(false);
   function trocar(dir: number) {
-    if (animando.current) return;
-    animando.current = true;
     Animated.parallel([
-      Animated.timing(slideX, { toValue: -dir * 34, duration: 110, useNativeDriver: true }),
-      Animated.timing(gridOp, { toValue: 0, duration: 110, useNativeDriver: true }),
+      Animated.timing(slideX, { toValue: -dir * 40, duration: 120, useNativeDriver: true }),
+      Animated.timing(gridOp, { toValue: 0, duration: 120, useNativeDriver: true }),
     ]).start(() => {
-      if (dir > 0) { if (mes === 11) { setMes(0); setAno((a) => a + 1); } else setMes((m) => m + 1); }
-      else if (mes === 0) { setMes(11); setAno((a) => a - 1); } else setMes((m) => m - 1);
-      slideX.setValue(dir * 34);
+      setRef((r) => {
+        let m = r.mes + dir, a = r.ano;
+        if (m < 0) { m = 11; a--; } else if (m > 11) { m = 0; a++; }
+        return { ano: a, mes: m };
+      });
+      slideX.setValue(dir * 40);
       Animated.parallel([
         Animated.spring(slideX, { toValue: 0, useNativeDriver: true, tension: 90, friction: 11 }),
-        Animated.timing(gridOp, { toValue: 1, duration: 180, useNativeDriver: true }),
-      ]).start(() => { animando.current = false; });
+        Animated.timing(gridOp, { toValue: 1, duration: 190, useNativeDriver: true }),
+      ]).start();
     });
   }
 
