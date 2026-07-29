@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.0] — 2026-07-29
+
+### Adicionado
+- feat: **calendário de vendas** — captura a data da venda (editável, com data estimada que pede confirmação), tela navegável por mês com vendas por dia, custo/lucro por peça e métricas do mês (faturamento, lucro, margem e ROI)
+- feat: **conta do Instagram com auto-login** salva no aparelho (login+senha no SecureStore, nunca no servidor) — reconecta num toque preenchendo e logando sozinho, resolvendo o vai-e-volta do checkpoint/confirmar email
+- feat: **busca tolerante** nas peças — ignora acento, aceita palavras em qualquer ordem e tolera typo leve (subsequência); casa por nome e categoria (PT e traduzida)
+- feat: **teclado desce** ao arrastar/tocar fora do input (lista de peças, editor, conta do Instagram e carrossel de nomear)
+
+### Modificado
+- update: **editor de peça repaginado** em seções (a peça, preço, medidas e detalhes, organização, venda, legenda do post)
+
+### Corrigido
+- fix: **calendário do editor** não trava mais entre trocas de mês e o clique rápido não some o nome do mês (mês+ano num estado só, com o vira-ano dentro do updater)
+- fix: **data do editor** (meses, dias da semana e placeholder) traduzindo conforme o idioma selecionado
+- fix: **worker** lê o total de posts pela página do perfil — removido o `web_profile_info` que às vezes dava 400 por bug do IG
+
+### Notas
+- Sem mudança nativa: `runtimeVersion` segue em `1.0.0`; entregue por OTA (frontend, OTA #18) + `scp` (worker)
+
 ## [1.1.0] — 2026-07-28
 
 ### Adicionado
