@@ -17,6 +17,8 @@ import { SincronizarScreen } from '@/screens/SincronizarScreen';
 import { RunScreen } from '@/screens/RunScreen';
 import { HistoricoScreen } from '@/screens/HistoricoScreen';
 import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
+import { ContaInstagramScreen } from '@/screens/ContaInstagramScreen';
+import { CalendarioScreen } from '@/screens/CalendarioScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 
 export type RootStackParamList = {
@@ -30,7 +32,9 @@ export type RootStackParamList = {
   Sincronizar: undefined;
   Run: { runId: string; nome: string };
   Historico: undefined;
-  InstagramLogin: undefined;
+  ContaInstagram: undefined;
+  InstagramLogin: { label?: string; senha?: string } | undefined;
+  Calendario: undefined;
   Settings: undefined;
 };
 
@@ -78,6 +82,8 @@ export function RootNavigator() {
         <Stack.Screen name="Sincronizar" component={SincronizarScreen} options={{ title: t('nav.sync') }} />
         <Stack.Screen name="Run" component={RunScreen} options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="Historico" component={HistoricoScreen} options={{ title: t('nav.history') }} />
+        <Stack.Screen name="Calendario" component={CalendarioScreen} options={{ title: t('nav.calendar') }} />
+        <Stack.Screen name="ContaInstagram" component={ContaInstagramScreen} options={{ title: t('nav.account') }} />
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen} options={{ title: t('nav.instagram') }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
       </Stack.Navigator>
