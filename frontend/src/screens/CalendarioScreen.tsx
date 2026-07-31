@@ -99,8 +99,14 @@ export function CalendarioScreen() {
   const [ref, setRef] = useState({ ano: hoje.getFullYear(), mes: hoje.getMonth() });   // mes 0-11
   const [diaSel, setDiaSel] = useState<string | null>(null);
   const [editar, setEditar] = useState<{ peca: Peca | null } | null>(null);
-  // troca o dia selecionado com transição (entra/sai suave, não seco)
-  const setDia = useCallback((v: string | null) => { animarLista(); setDiaSel(v); }, []);
+  const scrollRef = useRef<ScrollView>(null);
+  // troca o dia selecionado com transição (entra/sai suave). Ao desmarcar (sair da lista de
+  // peças do dia) rola suave de volta pro topo, em vez do salto seco.
+  const setDia = useCallback((v: string | null) => {
+    animarLista();
+    setDiaSel(v);
+    if (v === null) scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
 
   // transição slide+fade ao trocar de mês (igual ao calendário do editar peça)
   const slideX = useRef(new Animated.Value(0)).current;
@@ -170,7 +176,7 @@ export function CalendarioScreen() {
   return (
     <View style={styles.tela}>
       {dog}
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 14 }} {...scrollProps}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 14 }} {...scrollProps}>
         {spacerEl}
 
         {/* tocar em qualquer espaço vazio (ou num dia sem venda) desmarca o dia selecionado */}
