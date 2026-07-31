@@ -168,7 +168,9 @@ export function PecasScreen() {
     const arr = (pecas ?? []).filter((p) => {
       if (filtro === 'vendidas' && !p.vendida) return false;
       if (filtro === 'disponiveis' && p.vendida) return false;
-      if (filtro === 'sem-drop' && p.drop_id != null) return false;
+      // "sem drop" = fora de QUALQUER drop: nem manual (drop_id) nem histórico (pela data do
+      // post). Peça raspada tem drop pelo postado_em, então checar só drop_id deixava tudo vazar.
+      if (filtro === 'sem-drop' && dropDaPeca(p.drop_id, p.postado_em)) return false;
       if (categoria && (p.item ?? '').trim() !== categoria) return false;
       // busca tolerante (sem acento, ordem livre, typo): nome + categoria (PT e traduzida)
       if (b && !casaBusca(`${p.nome ?? ''} ${p.item ?? ''} ${traduzCategoria(p.item ?? '', lang)}`, b)) return false;
@@ -184,7 +186,7 @@ export function PecasScreen() {
     });
     if (ordem === 'recente') arr.reverse();
     return arr;
-  }, [pecas, filtro, busca, ordem, categoria, lang]);
+  }, [pecas, drops, filtro, busca, ordem, categoria, lang]);
 
   if (!pecas) return <TelaCarregando />;
 
