@@ -49,8 +49,9 @@ async def health():
 
 # ───────────────────────────── dashboard ─────────────────────────
 @app.get("/brecho/dashboard", dependencies=[Depends(auth)])
-async def dashboard():
-    return pecas.dashboard()
+async def dashboard(desde: str | None = None, ate: str | None = None):
+    # desde/ate = janela de vendas (YYYY-MM-DD); sem eles, retorna tudo
+    return pecas.dashboard(desde=desde or None, ate=ate or None)
 
 
 # ───────────────────────────── peças ─────────────────────────────

@@ -419,15 +419,28 @@ def upsert_scraper(items, preview=False):
 
 
 # ─────────────────────────── KPIs ────────────────────────────────
-def _kpis(pecas):
-    vend = [p for p in pecas if p["vendida"]]
-    disp = [p for p in pecas if not p["vendida"]]
+# vendas dentro da janela [desde, ate] pela data da venda (vendida_em, YYYY-MM-DD).
+# datas None = sem limite daquele lado. Peça vendida sem vendida_em fica de fora da janela.
+def _venda_no_periodo(p, desde, ate):
+    if not p["vendida"]:
+        return False
+    d = (p.get("vendida_em") or "")[:10]
+    if not d:
+        return False
+    if desde and d < desde:
+        return False
+    if ate and d > ate:
+        return False
+    return True
+
+
+def _kpis(vend, disp):
     faturamento = sum(_receita(p) for p in vend)
     cmv = sum(p["compra"] for p in vend)
     lucro = faturamento - cmv
     est_valor = sum(_receita(p) for p in disp)
     est_custo = sum(p["compra"] for p in disp)
-    total = len(pecas)
+    total = len(vend) + len(disp)
     return {
         "total": total,
         "vendidas": len(vend),
@@ -440,7 +453,7 @@ def _kpis(pecas):
         "roi_pct": round(lucro / cmv * 100, 1) if cmv else 0,
         "ticket_medio": round(faturamento / len(vend), 2) if vend else 0,
         "custo_medio": round(cmv / len(vend), 2) if vend else 0,
-        "investido_total": round(sum(p["compra"] for p in pecas), 2),
+        "investido_total": round(cmv + est_custo, 2),
         "estoque_valor": round(est_valor, 2),
         "estoque_custo": round(est_custo, 2),
         "estoque_lucro_potencial": round(est_valor - est_custo, 2),
@@ -460,10 +473,20 @@ def _por_grupo(pecas, chave_label):
     return g
 
 
-def dashboard():
+def dashboard(desde=None, ate=None):
     pecas = listar()["pecas"]
     if not pecas:
         return {"existe": False, "kpis": None, "por_drop": [], "por_categoria": []}
+
+    # Período (opcional) = janela de VENDAS pela data da venda. As métricas de venda
+    # (faturamento, lucro, margem, ROI, ticket, por_drop/categoria) consideram só o que
+    # vendeu na janela; o ESTOQUE segue sendo o snapshot atual (peças ainda disponíveis).
+    if desde or ate:
+        vend = [p for p in pecas if _venda_no_periodo(p, desde, ate)]
+    else:
+        vend = [p for p in pecas if p["vendida"]]
+    disp = [p for p in pecas if not p["vendida"]]
+    pecas = vend + disp   # base do dashboard (vendas do período + estoque atual)
 
     # agrupa por drop de forma ÚNICA: peça em drop manual pelo drop_id (todos os drops
     # manuais se chamam "rascunho", então não dá pra agrupar por nome), peça raspada sem
@@ -500,4 +523,4 @@ def dashboard():
          for k, v in gc.items()],
         key=lambda x: x["faturamento"], reverse=True)
 
-    return {"existe": True, "kpis": _kpis(pecas), "por_drop": por_drop, "por_categoria": por_categoria}
+    return {"existe": True, "kpis": _kpis(vend, disp), "por_drop": por_drop, "por_categoria": por_categoria}

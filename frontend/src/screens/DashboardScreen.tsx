@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,9 +10,14 @@ import { traduzCategoria } from '@/i18n/categorias';
 import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
 import { Aparece, Card } from '@/ui/components';
+import { CalendarioFaixa } from '@/ui/CalendarioFaixa';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+
+const p2 = (n: number) => String(n).padStart(2, '0');
+const iso = (d: Date) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+const brData = (s: string) => s.split('-').reverse().join('/');   // 2026-07-29 → 29/07/2026
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -35,15 +40,39 @@ export function DashboardScreen() {
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [dropsInfo, setDropsInfo] = useState<DropResumo[]>([]);
   const nav = useNavigation<Nav>();
+  // período (janela de vendas): preset ou faixa personalizada. desde/ate null = tudo.
+  const [periodo, setPeriodo] = useState<{ preset: string; desde: string | null; ate: string | null }>(
+    { preset: 'tudo', desde: null, ate: null });
+  const [faixaAberta, setFaixaAberta] = useState(false);
+
+  // quando dados novos chegam (troca de filtro/refresh), os componentes entram com um fade
+  // rápido — sem ficar "apagado" esperando o backend (não apaga preventivamente).
+  const conteudoOp = useRef(new Animated.Value(1)).current;
+  const jaCarregou = useRef(false);
+  useEffect(() => {
+    if (!dash) return;
+    if (!jaCarregou.current) { jaCarregou.current = true; return; }   // 1º load real: sem flash
+    conteudoOp.setValue(0.35);
+    Animated.timing(conteudoOp, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+  }, [dash, conteudoOp]);
+
+  function escolherPreset(key: string) {
+    const h = new Date();
+    if (key === 'tudo') return setPeriodo({ preset: 'tudo', desde: null, ate: null });
+    if (key === 'mes') return setPeriodo({ preset: 'mes', desde: iso(new Date(h.getFullYear(), h.getMonth(), 1)), ate: iso(h) });
+    if (key === '30d') { const d = new Date(h); d.setDate(d.getDate() - 29); return setPeriodo({ preset: '30d', desde: iso(d), ate: iso(h) }); }
+    if (key === 'ano') return setPeriodo({ preset: 'ano', desde: iso(new Date(h.getFullYear(), 0, 1)), ate: iso(h) });
+    if (key === 'anopassado') return setPeriodo({ preset: 'anopassado', desde: iso(new Date(h.getFullYear() - 1, 0, 1)), ate: iso(new Date(h.getFullYear() - 1, 11, 31)) });
+  }
 
   const insets = useSafeAreaInsets();
   const carregar = useCallback(() => {
     return Promise.all([
-      api.getDashboard().then(setDash)
+      api.getDashboard(periodo.desde, periodo.ate).then(setDash)
         .catch(() => setDash({ existe: false, kpis: null, por_drop: [], por_categoria: [] })),
       api.listDropsTodos().then((r) => setDropsInfo(r.drops)).catch(() => {}),
     ]);
-  }, []);
+  }, [periodo.desde, periodo.ate]);
   useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
   const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
 
@@ -68,12 +97,33 @@ export function DashboardScreen() {
   }
 
   const k = dash.kpis;
+  const LABELS: Record<string, string> = {
+    tudo: t('dashboard.periodAll'), mes: t('dashboard.periodMonth'),
+    '30d': t('dashboard.period30'), ano: t('dashboard.periodYear'),
+    anopassado: t('dashboard.periodLastYear'),
+  };
 
   return (
     <View style={styles.tela}>
       {dog}
       <ScrollView style={styles.tela} contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 32 }} {...scrollProps}>
       {spacerEl}
+
+      {/* filtro de período: pills em scroll horizontal (não quebram linha) + faixa personalizada */}
+      <Aparece>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pills}>
+          {(['tudo', '30d', 'ano', 'anopassado'] as const).map((key) => (
+            <PillP key={key} on={periodo.preset === key} onPress={() => escolherPreset(key)}>{LABELS[key]}</PillP>
+          ))}
+          <PillP on={periodo.preset === 'custom'} icon="calendar-outline" onPress={() => setFaixaAberta(true)}>
+            {periodo.preset === 'custom' && periodo.desde && periodo.ate
+              ? (periodo.desde === periodo.ate ? brData(periodo.desde) : `${brData(periodo.desde).slice(0, 5)}–${brData(periodo.ate).slice(0, 5)}`)
+              : t('dashboard.periodCustom')}
+          </PillP>
+        </ScrollView>
+      </Aparece>
+
+      <Animated.View style={[styles.conteudo, { opacity: conteudoOp }]}>
       <Aparece>
         <View style={styles.heroGrid}>
           <Hero titulo={t('dashboard.faturamento')} valor={brl(k.faturamento)} cor={colors.ok} />
@@ -134,8 +184,37 @@ export function DashboardScreen() {
           </Card>
         </Aparece>
       )}
+      </Animated.View>
       </ScrollView>
+
+      <CalendarioFaixa visible={faixaAberta} desde={periodo.desde} ate={periodo.ate}
+        onClose={() => setFaixaAberta(false)}
+        onAplicar={(d, a) => {
+          // fecha o modal PRIMEIRO e só troca o período quando ele já sumiu — senão o fade do
+          // backdrop do modal se soma ao crossfade do conteúdo e dá a impressão de piscada
+          setFaixaAberta(false);
+          setTimeout(() => setPeriodo({ preset: 'custom', desde: d, ate: a }), 240);
+        }} />
     </View>
+  );
+}
+
+// mesma animação de press das chips das Peças (ChipBtn): spring de escala no toque
+function PillP({ on, onPress, icon, children }: {
+  on: boolean; onPress: () => void; icon?: React.ComponentProps<typeof Ionicons>['name']; children: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const scale = useRef(new Animated.Value(1)).current;
+  const anima = (to: number) =>
+    Animated.spring(scale, { toValue: to, useNativeDriver: true, friction: 6, tension: 140 }).start();
+  return (
+    <Pressable onPress={onPress} onPressIn={() => anima(0.9)} onPressOut={() => anima(1)}>
+      <Animated.View style={[styles.pill, on && styles.pillOn, { transform: [{ scale }] }]}>
+        {icon ? <Ionicons name={icon} size={13} color={on ? '#FFFFFF' : colors.marca} style={{ marginRight: 4 }} /> : null}
+        <Text style={[styles.pillTxt, on && styles.pillTxtOn]}>{children}</Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -208,6 +287,12 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   vazioTela: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: 32 },
   vazioTxt: { color: colors.textoFraco, textAlign: 'center', lineHeight: 20 },
+  conteudo: { gap: 14 },
+  pills: { flexDirection: 'row', gap: 8, paddingVertical: 2, paddingRight: 4 },
+  pill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  pillOn: { backgroundColor: colors.marca, borderColor: colors.marca },
+  pillTxt: { color: colors.texto, fontSize: 13, fontWeight: '600' },
+  pillTxtOn: { color: '#FFFFFF', fontWeight: '800' },
   heroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   hero: { flexBasis: '48%', flexGrow: 1, backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4 },
   heroTitulo: { color: colors.textoFraco, fontSize: 11, textTransform: 'uppercase', fontWeight: '700' },

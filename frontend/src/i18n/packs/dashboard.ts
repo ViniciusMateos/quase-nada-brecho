@@ -2,6 +2,16 @@
 export const pt: Record<string, string> = {
   // vazio
   'dashboard.vazio': 'Cadastra as primeiras peças em "Peças" que os números aparecem aqui.',
+  // período (filtro por janela de vendas)
+  'dashboard.periodAll': 'Tudo',
+  'dashboard.periodMonth': 'Este mês',
+  'dashboard.period30': '30 dias',
+  'dashboard.periodYear': 'Este ano',
+  'dashboard.periodLastYear': 'Ano passado',
+  'dashboard.periodCustom': 'Período',
+  'dashboard.periodPick': 'Toque no dia inicial e no final',
+  'dashboard.periodApply': 'Aplicar',
+  'dashboard.periodClear': 'Limpar',
   // heroes
   'dashboard.faturamento': 'Faturamento',
   'dashboard.lucro': 'Lucro',
@@ -37,6 +47,16 @@ export const pt: Record<string, string> = {
 export const en: Record<string, string> = {
   // vazio
   'dashboard.vazio': 'Add your first items in "Items" and the numbers show up here.',
+  // period (sales-window filter)
+  'dashboard.periodAll': 'All',
+  'dashboard.periodMonth': 'This month',
+  'dashboard.period30': '30 days',
+  'dashboard.periodYear': 'This year',
+  'dashboard.periodLastYear': 'Last year',
+  'dashboard.periodCustom': 'Period',
+  'dashboard.periodPick': 'Tap the start and end day',
+  'dashboard.periodApply': 'Apply',
+  'dashboard.periodClear': 'Clear',
   // heroes
   'dashboard.faturamento': 'Revenue',
   'dashboard.lucro': 'Profit',

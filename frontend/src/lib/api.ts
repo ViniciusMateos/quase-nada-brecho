@@ -99,8 +99,14 @@ export type IgCookie = {
 export type ConnectResult = { runs: { id: string }[] };
 
 export const api = {
-  // dashboard
-  getDashboard: () => http.get<Dashboard>('/brecho/dashboard'),
+  // dashboard — período opcional (janela de vendas, YYYY-MM-DD)
+  getDashboard: (desde?: string | null, ate?: string | null) => {
+    const qs = new URLSearchParams();
+    if (desde) qs.set('desde', desde);
+    if (ate) qs.set('ate', ate);
+    const q = qs.toString();
+    return http.get<Dashboard>(`/brecho/dashboard${q ? `?${q}` : ''}`);
+  },
 
   // peças
   listPecas: () => http.get<{ pecas: Peca[] }>('/brecho/pecas'),
