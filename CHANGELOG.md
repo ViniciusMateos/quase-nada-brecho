@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] — 2026-07-31
+
+### Adicionado
+- feat: **dashboard filtrável por período** — pills (Tudo, 30 dias, Este ano, Ano passado) + um **calendário de faixa** personalizado; as métricas de venda (faturamento, lucro, margem, ROI, ticket, por drop/categoria) passam a considerar só o que vendeu na janela (pela data da venda), com fade rápido na troca; o estoque segue como snapshot atual
+
+### Modificado
+- update: no calendário de vendas, ao desmarcar o dia o scroll volta pro topo animado em vez do salto seco
+
+### Corrigido
+- fix: filtro **"sem drop"** das peças agora conta também o drop histórico (pela data do post) — peça raspada não vaza mais como "sem drop"
+
+### Notas
+- Sem mudança nativa: `runtimeVersion` segue em `1.0.0`; entregue por OTA (frontend, OTA #25) + `scp` (backend)
+
 ## [1.2.0] — 2026-07-29
 
 ### Adicionado
