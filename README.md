@@ -56,7 +56,9 @@ quase-nada-brecho/
   scraper vê com o que está no app (casa por `#p` → `code` → nome).
 - **Dashboard** — faturamento, lucro, ROI, ticket médio, estoque e quebra por drop/categoria
   (peças consignadas entram só pela % que fica pra você); as linhas de categoria são atalho
-  pra tela de peças já filtrada.
+  pra tela de peças já filtrada. **Filtro por período** (pills Tudo/30 dias/Este ano/Ano
+  passado + um **calendário de faixa** personalizado): as métricas de venda passam a considerar
+  só o que vendeu na janela (pela data da venda); o estoque segue como snapshot atual.
 - **Calendário de vendas** — calendário navegável por mês que mostra as **vendas por dia** e,
   no topo, **faturamento, lucro, margem e ROI** do mês. Cada peça vendida guarda a **data da
   venda** (editável; quando é estimada — backfill/scraper — pede confirmação); tocar numa
