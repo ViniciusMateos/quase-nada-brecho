@@ -8,7 +8,7 @@
 // Não confundir com:
 //   - `version` (1.0.x) no package.json/app.config → versão de marketing do app
 //   - `runtimeVersion` (1.0.0) fixo → compatibilidade OTA×nativo (só muda em build)
-export const OTA_VERSION = 25;
+export const OTA_VERSION = 26;
 
 // Se o bundle que está rodando veio de um `eas update` (OTA) ou do JS embutido no build.
 // Em dev client / Expo Go o módulo pode não existir — cai no fallback.
