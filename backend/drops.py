@@ -121,6 +121,7 @@ def _saldo(pecas):
         "disponiveis": total - len(vend),
         "faturamento": round(faturamento, 2),
         "projecao": round(projecao, 2),
+        "projecao_lucro": round(projecao - gasto, 2),   # lucro líquido se TUDO vender
         "gasto": round(gasto, 2),
         "lucro": round(faturamento - cmv, 2),      # lucro líquido do que vendeu
         "sold_out": total > 0 and len(vend) == total,

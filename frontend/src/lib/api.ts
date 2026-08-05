@@ -60,6 +60,7 @@ export type DropResumo = {
   disponiveis: number;
   faturamento: number;
   projecao: number;
+  projecao_lucro: number;
   gasto: number;
   lucro: number;
   sold_out: boolean;

@@ -154,7 +154,10 @@ function DropCard({ drop, onPress, onLongPress, apagando }:
           <Linha label={t('drops.pieces')} valor={t('drops.soldCount', { sold: drop.vendidas, total: drop.qtd_pecas })} />
           <Linha label={t('drops.revenue')} valor={brl(drop.faturamento)} cor={colors.ok} />
           {drop.disponiveis > 0 && (
-            <Linha label={t('drops.projection')} valor={brl(drop.projecao)} cor={colors.marca} />
+            <>
+              <Linha label={t('drops.projection')} valor={brl(drop.projecao)} cor={colors.marca} />
+              <Linha label={t('drops.projectionProfit')} valor={brl(drop.projecao_lucro)} cor={colors.marca} />
+            </>
           )}
           <Linha label={t('drops.spent')} valor={brl(drop.gasto)} cor={colors.textoFraco} />
           <Linha label={t('drops.profit')} valor={brl(drop.lucro)} cor={colors.marca} forte />
