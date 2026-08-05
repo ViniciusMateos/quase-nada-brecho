@@ -50,7 +50,8 @@ quase-nada-brecho/
   preço, observação, hashtags) com botão de **copiar** e link **abrir no Instagram**. Com o
   toggle **Manual** ligado, o template vira **editável** e o texto customizado é salvo.
 - **Drops** — agrupa peças em drops datados (rascunho → agendado → publicado). Cada card mostra
-  peças vendidas, faturamento, gasto, lucro e a **projeção** (faturamento se tudo vender).
+  peças vendidas, faturamento, gasto, lucro e a **projeção** de faturamento **e de lucro líquido**
+  (se tudo vender) — as projeções somem quando o drop esgota.
 - **Código #p** — cada peça tem um número sequencial (`#p123`) que entra nas hashtags do
   template e é lido de volta da legenda no Insta. É a chave mais confiável pra casar o que o
   scraper vê com o que está no app (casa por `#p` → `code` → nome).
@@ -68,7 +69,10 @@ quase-nada-brecho/
 - **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
   Instagram do brechó **descendo o perfil como humano** e interceptando as respostas
   (graphql) que a própria página dispara — sem chamar a API em rajada, então **não toma
-  rate-limit** e pega o feed inteiro numa run. O worker é um **raspador puro**: só despeja
+  rate-limit** e pega o feed inteiro numa run. A **completude** é conferida pelo total de posts
+  do perfil: se o carregamento infinito não engatar (empaca nos primeiros), ele **re-arma** e,
+  no limite, **aborta com erro** (raspagem incompleta) em vez de reconciliar meia raspagem. O
+  worker é um **raspador puro**: só despeja
   os posts parseados; **quem reconcilia é o backend**. O **app é a fonte única da verdade**
   e a planilha virou só um **espelho** gerado dele. A reconciliação casa cada post por
   `#p` → `code` → nome, atualiza preço/medidas/venda (Insta ganha nas peças disponíveis) e
