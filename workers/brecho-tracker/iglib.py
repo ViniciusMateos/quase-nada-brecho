@@ -356,12 +356,21 @@ class IG:
             # (best-effort; se não achar, segue sem %). Já estamos no perfil, sem nav extra.
             if not total_alvo:
                 total_alvo = self.posts_da_pagina()
+            # ── critério de fim ──────────────────────────────────────────────
+            # Se sabemos quantos posts o perfil TEM (total_alvo, lido da página), a
+            # COMPLETUDE manda: só é "fim" quando chegamos perto disso. Um "parou" cedo
+            # (ex.: empacou nos 12 primeiros) NÃO é fim do feed — é o carregador infinito
+            # do IG que não engatou. Aí a gente re-arma ele (sobe um tico e desce forte) e
+            # insiste, em vez de declarar sucesso com meia raspagem.
+            alvo = total_alvo or 0
+            meta = int(alvo * 0.90)     # chegou aqui = feed inteiro (folga p/ reels/fixados)
+            minimo = int(alvo * 0.50)   # terminou abaixo disso = claramente incompleto
             estavel = ult = 0
             for i in range(max_scrolls):
                 self.page.mouse.wheel(0, random.randint(3000, 6000))
                 self.page.wait_for_timeout(int(random.uniform(*config.SCROLL_PAUSA_MS)))
                 n = len(capturados)
-                if n > ult:                        # só loga quando chegou lote novo
+                if n > ult:                        # chegou lote novo
                     log.info("+%d posts (total: %d)", n - ult, n)
                     # marker de progresso pro backend/app (linha PURA, sem prefixo de log)
                     if total_alvo:
@@ -369,13 +378,41 @@ class IG:
                     estavel = 0
                 else:
                     estavel += 1                   # scroll sem novidade (carregando/fim)
+                    # longe do total conhecido → o carregador não engatou: re-arma ele
+                    # (sobe um pouco e desce forte) e dá mais tempo, em vez de contar como fim.
+                    if alvo and n < meta:
+                        self.page.mouse.wheel(0, -1500)
+                        self.page.wait_for_timeout(500)
+                        self.page.mouse.wheel(0, 9000)
+                        self.page.wait_for_timeout(int(random.uniform(*config.SCROLL_PAUSA_MS)))
+                        n = len(capturados)
+                        if n > ult:
+                            log.info("+%d posts (re-armado) (total: %d)", n - ult, n)
+                            if total_alvo:
+                                print(f"[progress] {min(n, total_alvo)} {total_alvo} descendo o feed", flush=True)
+                            estavel = 0
                 ult = n
-                if estavel >= estavel_max:
+                if alvo and n >= meta:
+                    log.info("Capturou %d de ~%d posts — feed completo.", n, alvo)
+                    break
+                if not alvo and estavel >= estavel_max:
+                    # sem total conhecido não dá pra julgar completude → cai no heurístico
                     log.info("Feed estabilizou em %d posts — fim do perfil.", n)
+                    break
+                if alvo and estavel >= max(estavel_max, 12):
+                    log.warning("Feed empacou em %d de ~%d posts mesmo re-armando o carregador.", n, alvo)
                     break
         finally:
             try:
                 self.page.remove_listener("response", _on_response)
             except Exception:
                 pass
-        return list(capturados.values())
+        itens = list(capturados.values())
+        # guarda de completude: sabíamos o total e paramos MUITO abaixo dele → raspagem
+        # incompleta. Levanta pra virar ERRO visível (o app manda rodar de novo) em vez de
+        # reconciliar meia raspagem achando que é o feed inteiro — o caso perigoso (12 → "ok").
+        if total_alvo and len(itens) < minimo:
+            raise RuntimeError(
+                f"Raspagem incompleta: só {len(itens)} de ~{total_alvo} posts vistos — o "
+                f"carregamento infinito do IG não engatou. Rode de novo.")
+        return itens
