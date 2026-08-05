@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0] — 2026-08-05
+
+### Adicionado
+- feat: **projeção de lucro líquido** nos cards de drop (além da projeção de faturamento, se tudo vender); as projeções somem quando o drop esgota
+
+### Corrigido
+- fix: **scraper não estabiliza cedo** — a completude passa a ser guiada pelo total de posts do perfil; se o carregamento infinito do IG não engatar (empaca nos primeiros), ele re-arma o carregador e insiste, e no limite aborta com erro (raspagem incompleta) em vez de reconciliar meia raspagem achando que é o feed inteiro
+
+### Notas
+- Sem mudança nativa: `runtimeVersion` segue em `1.0.0`; entregue por OTA (frontend, OTA #26) + `scp` (backend + worker)
+
 ## [1.3.0] — 2026-07-31
 
 ### Adicionado
