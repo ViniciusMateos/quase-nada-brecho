@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.0] — 2026-08-13
+
+### Adicionado
+- feat: **Live Activity com anel de progresso** (roda que preenche + % no miolo) na cor do brechó — lock screen, ilha compacta, minimal e expandida; **precisa de build nativo** (não vai por OTA)
+
+### Modificado
+- update: no **calendário de vendas**, ao escolher um dia a tela desce suave até o começo da lista de peças (meses maiores não escondem mais as vendas embaixo da dobra)
+
+### Corrigido
+- fix: worker marca **"sem sessão" como erro** em vez de "finalizado" — sessão do Instagram expirada não vira mais sucesso mentiroso; o app pede pra reconectar
+- fix: anel do LA não corta na ilha compacta, fecha limpo no 100% e a logo não serrilha (interpolation)
+
+### Documentação
+- docs: guia do Live Activity com anel pra replicar no app Bots (`docs/LIVE_ACTIVITY_ANEL.md`)
+
+### Notas
+- **Este release tem mudança nativa** (o Live Activity): exige **build** (feito no perfil `preview`); `runtimeVersion` segue `1.0.0`, então os OTAs continuam compatíveis. O resto (calendário, worker) foi por OTA #28 + `scp`.
+
 ## [1.4.0] — 2026-08-05
 
 ### Adicionado
