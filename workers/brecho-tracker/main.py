@@ -144,8 +144,11 @@ def run(dry=False, full=False):
         _reinjetar_sessao(ig)
         ig.ir("https://www.instagram.com/")
         if not ig.logado():
-            log.error("Sem sessão logada. Rode `--import-cookies <arquivo.json>` primeiro.")
-            return
+            # sessão ausente/expirada NÃO é "nada a atualizar" — é falha: precisa reconectar.
+            # Levanta pra virar ERRO visível (exit != 0) em vez de "finalizado" mentindo sucesso.
+            raise RuntimeError(
+                "Sem sessão logada — a sessão do Instagram expirou ou não foi importada. "
+                "Reconecte o Instagram no app e rode de novo.")
         ig.carregar_tokens()
         pecas = raspar(ig, boundary)
         # (sem download de fotos: o app usa o link da CDN direto; a foto de upload local
