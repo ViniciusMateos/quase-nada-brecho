@@ -80,7 +80,8 @@ quase-nada-brecho/
   igualzinho mas dá rollback, não grava nada) e **Completa** (re-lê o feed inteiro e
   recaptura as fotos, pra quando um link do Insta expira). Não deixa **duas raspagens ao
   mesmo tempo**, tem **logs ao vivo** (WebSocket + UI animada), barra de progresso e
-  **Live Activity** na tela de bloqueio. Peças **manuais/travadas** o scraper nunca mexe.
+  **Live Activity** (anel de progresso na tela de bloqueio / ilha dinâmica). Peças
+  **manuais/travadas** o scraper nunca mexe.
   Se as peças de um **drop manual** aparecem no Insta, o app entende que o drop foi
   publicado: mantém as peças no drop, marca-o como **publicado** e **sincroniza a data**
   com o post.
