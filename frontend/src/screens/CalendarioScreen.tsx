@@ -100,12 +100,16 @@ export function CalendarioScreen() {
   const [diaSel, setDiaSel] = useState<string | null>(null);
   const [editar, setEditar] = useState<{ peca: Peca | null } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  // troca o dia selecionado com transição (entra/sai suave). Ao desmarcar (sair da lista de
-  // peças do dia) rola suave de volta pro topo, em vez do salto seco.
+  const contPressY = useRef(0);           // Y do container (Pressable) dentro do conteúdo do scroll
+  const scrollPendente = useRef(false);   // acabou de escolher um dia → rolar até a lista
+  // troca o dia selecionado com transição (entra/sai suave). Ao desmarcar rola de volta pro
+  // topo; ao escolher um dia com vendas, desce até o COMEÇO da lista (meses maiores empurram a
+  // lista pra baixo da dobra). A posição é medida por onLayout: Y do container + Y da lista.
   const setDia = useCallback((v: string | null) => {
     animarLista();
     setDiaSel(v);
     if (v === null) scrollRef.current?.scrollTo({ y: 0, animated: true });
+    else scrollPendente.current = true;
   }, []);
 
   // transição slide+fade ao trocar de mês (igual ao calendário do editar peça)
@@ -180,7 +184,8 @@ export function CalendarioScreen() {
         {spacerEl}
 
         {/* tocar em qualquer espaço vazio (ou num dia sem venda) desmarca o dia selecionado */}
-        <Pressable style={{ gap: 14 }} onPress={() => { if (diaSel) setDia(null); }}>
+        <Pressable style={{ gap: 14 }} onPress={() => { if (diaSel) setDia(null); }}
+          onLayout={(e) => { contPressY.current = e.nativeEvent.layout.y; }}>
         {/* topo do mês: navegação + faturamento */}
         <Aparece>
           <View style={styles.card}>
@@ -244,6 +249,13 @@ export function CalendarioScreen() {
 
         {/* vendas do dia selecionado, ou dica */}
         {diaSel ? (
+          <View
+            onLayout={(e) => {
+              if (!scrollPendente.current) return;
+              scrollPendente.current = false;
+              const y = contPressY.current + e.nativeEvent.layout.y - 12;   // topo da lista − folga
+              scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true });
+            }}>
           <Aparece delay={100}>
             <Text style={styles.secao}>
               {new Date(diaSel + 'T12:00:00').toLocaleDateString(lang === 'en' ? 'en-US' : 'pt-BR', { day: '2-digit', month: 'long' })}
@@ -282,6 +294,7 @@ export function CalendarioScreen() {
               )}
             />
           </Aparece>
+          </View>
         ) : (
           <Text style={styles.dica}>{qtdMes ? t('calendario.pickDay') : t('calendario.noSalesMonth')}</Text>
         )}
