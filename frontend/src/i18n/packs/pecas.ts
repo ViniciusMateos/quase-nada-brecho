@@ -1,6 +1,11 @@
 // Pack de traduções: tela de Peças (busca, filtros, categoria, cards, alertas).
 export const pt: Record<string, string> = {
   'pecas.search': 'Buscar peça…',
+  'pecas.select': 'Selecionar',
+  'pecas.selectedCount': '{n} selecionadas',
+  'pecas.deleteSelected': 'Excluir',
+  'pecas.deleteSelTitle': 'Excluir selecionadas',
+  'pecas.deleteSelMsg': 'Apaga {n} peça(s) de vez. Confirma?',
   'pecas.all': 'Todas ({n})',
   'pecas.available': 'Disponíveis',
   'pecas.sold': 'Vendidas',
@@ -44,6 +49,11 @@ export const pt: Record<string, string> = {
 };
 export const en: Record<string, string> = {
   'pecas.search': 'Search item…',
+  'pecas.select': 'Select',
+  'pecas.selectedCount': '{n} selected',
+  'pecas.deleteSelected': 'Delete',
+  'pecas.deleteSelTitle': 'Delete selected',
+  'pecas.deleteSelMsg': 'Deletes {n} item(s) for good. Confirm?',
   'pecas.all': 'All ({n})',
   'pecas.available': 'Available',
   'pecas.sold': 'Sold',

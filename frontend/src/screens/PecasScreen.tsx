@@ -112,6 +112,35 @@ export function PecasScreen() {
   const [apagandoPeca, setApagandoPeca] = useState<number | null>(null);
   const [recarregando, setRecarregando] = useState(false);
 
+  // ─── modo de seleção múltipla (apagar várias) ───
+  const [selMode, setSelMode] = useState(false);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  function entrarSelecao(id?: number) {
+    setSelMode(true);
+    setSel(id != null ? new Set([id]) : new Set());
+  }
+  function sairSelecao() { setSelMode(false); setSel(new Set()); }
+  function toggleSel(id: number) {
+    setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function excluirSelecionadas() {
+    const ids = [...sel];
+    if (!ids.length) return;
+    Alert.alert(t('pecas.deleteSelTitle'), t('pecas.deleteSelMsg', { n: ids.length }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'), style: 'destructive',
+        onPress: async () => {
+          setRecarregando(true);
+          for (const id of ids) { try { await api.delPeca(id); } catch {} }
+          sairSelecao();
+          await carregar();
+          setRecarregando(false);
+        },
+      },
+    ]);
+  }
+
   useEffect(() => { baseUrl().then(setBase); }, []);
 
   function excluirPeca(peca: Peca) {
@@ -193,19 +222,36 @@ export function PecasScreen() {
   return (
     <View style={styles.tela}>
       {dog}
-      <View style={styles.topo}>
-        <View style={styles.buscaBox}>
-          <Ionicons name="search" size={16} color={colors.textoFraco} />
-          <TextInput value={busca} onChangeText={setBusca} placeholder={t('pecas.search')}
-            placeholderTextColor={colors.textoFraco} style={styles.buscaInput} />
+      {selMode ? (
+        <View style={styles.topo}>
+          <TouchableOpacity style={styles.selCancel} onPress={sairSelecao} hitSlop={8}>
+            <Ionicons name="close" size={22} color={colors.texto} />
+          </TouchableOpacity>
+          <Text style={styles.selCount}>{t('pecas.selectedCount', { n: sel.size })}</Text>
+          <TouchableOpacity style={[styles.selExcluir, !sel.size && { opacity: 0.4 }]}
+            disabled={!sel.size} onPress={excluirSelecionadas}>
+            <Ionicons name="trash" size={16} color="#FFFFFF" />
+            <Text style={styles.selExcluirTxt}>{t('pecas.deleteSelected')}</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.bulkBtn} onPress={importarVarias}>
-          <Ionicons name="images-outline" size={20} color={colors.marca} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setEditar({ peca: null })}>
-          <Ionicons name="add" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      ) : (
+        <View style={styles.topo}>
+          <View style={styles.buscaBox}>
+            <Ionicons name="search" size={16} color={colors.textoFraco} />
+            <TextInput value={busca} onChangeText={setBusca} placeholder={t('pecas.search')}
+              placeholderTextColor={colors.textoFraco} style={styles.buscaInput} />
+          </View>
+          <TouchableOpacity style={styles.bulkBtn} onPress={() => entrarSelecao()}>
+            <Ionicons name="checkmark-done-outline" size={20} color={colors.marca} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bulkBtn} onPress={importarVarias}>
+            <Ionicons name="images-outline" size={20} color={colors.marca} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setEditar({ peca: null })}>
+            <Ionicons name="add" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.chips}>
         {(['todas', 'disponiveis', 'vendidas', 'sem-drop'] as Filtro[]).map((f) => (
           <ChipBtn key={f} on={filtro === f} onPress={() => { setFiltro(f); bump(); }}>
@@ -243,8 +289,14 @@ export function PecasScreen() {
         ListEmptyComponent={<Text style={styles.vazio}>{t('pecas.empty')}</Text>}
         renderItem={({ item, index }) => (
           <Aparece delay={Math.min(index, 8) * 30}>
-            <Pressavel style={styles.linha} onPress={() => setEditar({ peca: item })}
-              onLongPress={(x, y) => setMenu({ x, y, peca: item })}>
+            <Pressavel style={[styles.linha, selMode && sel.has(item.id) && styles.linhaSel]}
+              onPress={() => (selMode ? toggleSel(item.id) : setEditar({ peca: item }))}
+              onLongPress={(x, y) => (selMode ? toggleSel(item.id) : setMenu({ x, y, peca: item }))}>
+              {selMode && (
+                <View style={[styles.check, sel.has(item.id) && styles.checkOn]}>
+                  {sel.has(item.id) ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                </View>
+              )}
               {item.imagem_url ? (
                 <Image source={img(item.imagem_url)} style={styles.thumb} contentFit="cover" transition={150} />
               ) : (
@@ -306,6 +358,7 @@ export function PecasScreen() {
       <MenuContexto
         visible={!!menu} x={menu?.x ?? 0} y={menu?.y ?? 0} onClose={() => setMenu(null)}
         itens={menu ? [
+          { label: t('pecas.select'), icon: 'checkmark-done-outline', onPress: () => { const p = menu.peca; setMenu(null); entrarSelecao(p.id); } },
           ...(dropDaPeca(menu.peca.drop_id, menu.peca.postado_em)
             ? [{ label: t('common.viewInDrop'), icon: 'albums-outline' as const, onPress: () => irPraDrop(menu.peca.drop_id, menu.peca.postado_em) }]
             : []),
@@ -406,6 +459,13 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   recarregandoCard: { backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 22, alignItems: 'center', gap: 10, borderWidth: 1, borderColor: colors.border },
   recarregandoTxt: { color: colors.texto, fontSize: 14, fontWeight: '600' },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border },
+  linhaSel: { borderColor: colors.marca, backgroundColor: colors.card2 },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.textoFraco, alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: colors.marca, borderColor: colors.marca },
+  selCancel: { width: 40, height: 42, alignItems: 'flex-start', justifyContent: 'center' },
+  selCount: { flex: 1, color: colors.texto, fontSize: 16, fontWeight: '800' },
+  selExcluir: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.erro, borderRadius: 12, paddingHorizontal: 14, height: 42 },
+  selExcluirTxt: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   linhaApagando: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,15,15,0.72)', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   thumb: { width: 44, height: 55, borderRadius: 8, backgroundColor: colors.card2 },
   thumbVazia: { alignItems: 'center', justifyContent: 'center' },

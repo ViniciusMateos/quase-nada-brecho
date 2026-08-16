@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Animated, Pressable, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
 import { LoadingDog } from '@/ui/LoadingDog';
@@ -9,7 +9,7 @@ export function Pressavel({
   children, onPress, onLongPress, style,
 }: {
   children: React.ReactNode; onPress?: () => void;
-  onLongPress?: (x: number, y: number) => void; style?: ViewStyle;
+  onLongPress?: (x: number, y: number) => void; style?: StyleProp<ViewStyle>;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const anima = (to: number) =>
