@@ -40,7 +40,8 @@ quase-nada-brecho/
   vendida; filtra por disponível/vendida/sem-drop **e por categoria**, com ordenação
   recente↔antiga. A **busca é tolerante**: ignora acento, aceita as palavras em qualquer
   ordem e aguenta typo leve (casa por nome e categoria, em PT e traduzida). Mostra o **drop**
-  da peça e permite **entrar nele** (pelo editor ou segurando a peça). O editor é um
+  da peça e permite **entrar nele** (pelo editor ou segurando a peça). Dá pra **selecionar
+  várias** (segurar → "Selecionar", ou o botão no topo) e **apagar em lote**. O editor é um
   componente único, compartilhado com a tela de Drops, organizado em seções.
 - **Consignado** — marca a peça como de terceiro + quanto fica pra você, escolhendo entre
   **% da venda** ou **valor fixo (R$)**; os relatórios (faturamento, lucro, dashboard, saldo
