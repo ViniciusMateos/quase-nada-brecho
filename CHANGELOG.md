@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.1] — 2026-08-16
+
+### Adicionado
+- feat: **seleção múltipla** na tela de Peças — segurar uma peça mostra "Selecionar" (ou o botão no topo), entra no modo de seleção (check + borda), e apaga **várias de uma vez** com confirmação
+
+### Corrigido
+- fix: **duplo-toque no botão de importar** (carrossel) não duplica mais a importação — trava síncrona por ref, além do botão já desabilitar no loading
+
+### Notas
+- Sem mudança nativa: entregue por OTA #29 (`runtimeVersion` segue `1.0.0`).
+
 ## [1.5.0] — 2026-08-13
 
 ### Adicionado
