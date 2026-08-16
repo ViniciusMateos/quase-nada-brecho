@@ -83,7 +83,12 @@ export function CarrosselPecasScreen() {
     ]);
   }
 
+  const enviando = useRef(false);
   async function finalizar() {
+    // trava SÍNCRONA de duplo-toque: o botão desabilita no `loading`, mas um 2º toque
+    // no mesmo frame (antes do re-render) dispararia de novo e importaria tudo 2×.
+    if (enviando.current) return;
+    enviando.current = true;
     setProgresso({ feitas: 0, total: fotos.length });
     let ok = 0;
     for (let i = 0; i < fotos.length; i++) {
