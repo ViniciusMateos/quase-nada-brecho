@@ -69,7 +69,8 @@ quase-nada-brecho/
   vendidas) e um log por peça (NOVA/RELACIONADA/ATUALIZADA/VENDIDA), filtrável por período.
 - **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
   Instagram do brechó **descendo o perfil como humano** e interceptando as respostas
-  (graphql) que a própria página dispara — sem chamar a API em rajada, então **não toma
+  (graphql) que a própria página dispara — colhendo **só os posts da própria conta** (o IG
+  serve post de outras contas junto: sugestão/tag/reels) — sem chamar a API em rajada, então **não toma
   rate-limit** e pega o feed inteiro numa run. A **completude** é conferida pelo total de posts
   do perfil: se o carregamento infinito não engatar (empaca nos primeiros), ele **re-arma** e,
   no limite, **aborta com erro** (raspagem incompleta) em vez de reconciliar meia raspagem. O
