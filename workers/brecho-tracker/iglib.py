@@ -312,12 +312,21 @@ class IG:
         estavel_max = estavel_max or config.SCROLL_ESTAVEL_MAX
         capturados = {}
 
+        alvo_user = (config.BRECHO_USERNAME or "").lower()
+
         def _colher(o):
             if isinstance(o, dict):
                 code = o.get("code")
                 # nó de post de topo: tem code + caption (carrossel-filho não tem caption própria)
                 if code and ("image_versions2" in o or "caption" in o):
-                    capturados.setdefault(code, o)
+                    # o IG serve posts de OUTRAS contas junto no scroll (sugestão/tag/reels
+                    # relacionados — ex.: bazar de outra loja). Só colhe o que é da PRÓPRIA
+                    # conta do brechó: se o nó declara um dono diferente, descarta. Sem dono
+                    # declarado = assume que é do perfil (não descarta à toa).
+                    u = o.get("user") or o.get("owner")
+                    dono = u.get("username") if isinstance(u, dict) else None
+                    if not dono or dono.lower() == alvo_user:
+                        capturados.setdefault(code, o)
                 for v in o.values():
                     _colher(v)
             elif isinstance(o, list):
