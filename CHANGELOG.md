@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.2] — 2026-08-18
+
+### Corrigido
+- fix: **scraper só coleta post da própria conta** do brechó — o IG serve posts de outras contas junto no scroll (sugestão/tag/reels relacionados) e eles viravam peça (ex.: um "Bazar" de outra loja); agora o coletor filtra pelo `user.username` da conta
+
+### Notas
+- Mudança só no worker (deploy por `scp`); sem OTA e sem mudança nativa. `runtimeVersion` segue `1.0.0`.
+
 ## [1.5.1] — 2026-08-16
 
 ### Adicionado
