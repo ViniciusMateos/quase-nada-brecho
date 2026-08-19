@@ -73,8 +73,10 @@ quase-nada-brecho/
   serve post de outras contas junto: sugestão/tag/reels) — sem chamar a API em rajada, então **não toma
   rate-limit** e pega o feed inteiro numa run. A **completude** é conferida pelo total de posts
   do perfil: se o carregamento infinito não engatar (empaca nos primeiros), ele **re-arma** e,
-  no limite, **aborta com erro** (raspagem incompleta) em vez de reconciliar meia raspagem. O
-  worker é um **raspador puro**: só despeja
+  no limite, **aborta com erro** (raspagem incompleta) em vez de reconciliar meia raspagem. Se
+  a sessão do Instagram estiver inválida (login/checkpoint/conta indisponível), a run não vira
+  **erro** e sim **sem sessão** (a run identifica a causa real e pede pra reconectar, sem tom de
+  "deu ruim"). O worker é um **raspador puro**: só despeja
   os posts parseados; **quem reconcilia é o backend**. O **app é a fonte única da verdade**
   e a planilha virou só um **espelho** gerado dele. A reconciliação casa cada post por
   `#p` → `code` → nome, atualiza preço/medidas/venda (Insta ganha nas peças disponíveis) e
@@ -97,8 +99,10 @@ quase-nada-brecho/
 ### Fluxo do scraper
 
 1. **Conectar Instagram** — em *Conta do Instagram* dá pra salvar login+senha **no aparelho**
-   (SecureStore, nunca no servidor) e reconectar num toque: o app preenche e loga sozinho na
-   WebView (resolvendo o checkpoint/confirmar email ali mesmo) e captura a sessão pro servidor.
+   (SecureStore, nunca no servidor), com **usuário editável** e **olho** pra ver/ocultar a senha.
+   Ao reconectar, o app preenche e loga sozinho na WebView, mas **só captura a sessão quando você
+   toca em "Conectar"** — assim dá pra resolver captcha/checkpoint/confirmar email **antes** e
+   nunca capturar uma sessão inválida.
 2. **Atualizar agora** — dispara a raspagem; acompanha os logs em tempo real.
 3. Ao fim, o backend reconcilia o que foi raspado com o acervo do app e re-espelha a planilha.
 
