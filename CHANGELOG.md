@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.0] — 2026-08-19
+
+### Adicionado
+- feat: **sessão inválida do Instagram vira "sem sessão"**, não erro — quando o feed não carrega, o worker identifica a causa real (login/checkpoint/conta indisponível) e a run é marcada como **sem sessão** em toda a stack (aviso, Live Activity e histórico de runs), com cor de alerta: é só reconectar
+- feat: na **conta do Instagram**, o **usuário** ficou editável (renomear apaga a credencial antiga antes de salvar) e a **senha** ganhou olho de ver/ocultar
+- feat: o **login do Instagram não conecta sozinho** — preenche e loga na WebView, mas só captura a sessão ao tocar em **Conectar**, pra resolver captcha/checkpoint/confirmar email antes e nunca capturar uma sessão inválida
+
+### Documentação
+- docs: README atualiza o fluxo de conectar Instagram e descreve o estado "sem sessão"
+
+### Notas
+- Frontend por **OTA #31** (`runtimeVersion` segue `1.0.0`); a parte do worker (sem sessão) vai por `scp`. Sem mudança nativa.
+
 ## [1.5.2] — 2026-08-18
 
 ### Corrigido
