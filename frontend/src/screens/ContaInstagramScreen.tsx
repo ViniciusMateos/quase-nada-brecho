@@ -21,7 +21,8 @@ export function ContaInstagramScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const nav = useNavigation<Nav>();
   const [creds, setCreds] = useState<Credencial[]>([]);
-  const [modal, setModal] = useState({ aberto: false, editando: false, usuario: '', senha: '' });
+  const [modal, setModal] = useState({ aberto: false, editando: false, usuario: '', senha: '', orig: '' });
+  const [verSenha, setVerSenha] = useState(false);   // olho da senha
 
   const carregar = useCallback(async () => {
     setCreds(await lerCredenciais().catch(() => []));
@@ -41,16 +42,22 @@ export function ContaInstagramScreen() {
     ]);
   }
 
-  function abrirAdd() { setModal({ aberto: true, editando: false, usuario: '', senha: '' }); }
-  function abrirEdit(c: Credencial) { setModal({ aberto: true, editando: true, usuario: c.usuario, senha: c.senha }); }
+  function abrirAdd() { setVerSenha(false); setModal({ aberto: true, editando: false, usuario: '', senha: '', orig: '' }); }
+  function abrirEdit(c: Credencial) { setVerSenha(false); setModal({ aberto: true, editando: true, usuario: c.usuario, senha: c.senha, orig: c.usuario }); }
   function fecharModal() { setModal((m) => ({ ...m, aberto: false })); }
 
   async function salvar() {
     const u = modal.usuario.trim().replace(/^@/, '');
     if (!u) { Alert.alert(t('common.oops'), t('conta.needUser')); return; }
     if (!modal.senha) { Alert.alert(t('common.oops'), t('conta.needPass')); return; }
-    try { await salvarCredencial({ usuario: u, senha: modal.senha }); fecharModal(); await carregar(); }
-    catch { Alert.alert(t('common.oops'), t('conta.saveFail')); }
+    try {
+      // renomeou o usuário? apaga a credencial antiga (a chave é o usuário) antes de salvar a nova
+      if (modal.editando && modal.orig && modal.orig.toLowerCase() !== u.toLowerCase()) {
+        await removerCredencial(modal.orig);
+      }
+      await salvarCredencial({ usuario: u, senha: modal.senha });
+      fecharModal(); await carregar();
+    } catch { Alert.alert(t('common.oops'), t('conta.saveFail')); }
   }
 
   return (
@@ -97,11 +104,16 @@ export function ContaInstagramScreen() {
               {modal.editando ? t('conta.editTitle', { u: modal.usuario }) : t('conta.newTitle')}
             </Text>
             <TextInput style={styles.input} placeholder={t('conta.userPlaceholder')} placeholderTextColor={colors.textoFraco}
-              autoCapitalize="none" autoCorrect={false} value={modal.usuario} editable={!modal.editando}
+              autoCapitalize="none" autoCorrect={false} value={modal.usuario}
               onChangeText={(v) => setModal((m) => ({ ...m, usuario: v }))} />
-            <TextInput style={styles.input} placeholder={t('conta.passPlaceholder')} placeholderTextColor={colors.textoFraco}
-              secureTextEntry autoCapitalize="none" autoCorrect={false} value={modal.senha}
-              onChangeText={(v) => setModal((m) => ({ ...m, senha: v }))} />
+            <View style={styles.senhaRow}>
+              <TextInput style={styles.senhaInput} placeholder={t('conta.passPlaceholder')} placeholderTextColor={colors.textoFraco}
+                secureTextEntry={!verSenha} autoCapitalize="none" autoCorrect={false} value={modal.senha}
+                onChangeText={(v) => setModal((m) => ({ ...m, senha: v }))} />
+              <TouchableOpacity onPress={() => setVerSenha((v) => !v)} hitSlop={8} style={styles.olhoBtn}>
+                <Ionicons name={verSenha ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textoFraco} />
+              </TouchableOpacity>
+            </View>
             <Text style={styles.modalDica}>{t('conta.passHint')}</Text>
             <View style={styles.modalBtns}>
               <View style={{ flex: 1 }}><Botao title={t('common.cancel')} cor={colors.card2} txtCor={colors.texto} onPress={fecharModal} /></View>
@@ -128,6 +140,9 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   modalCard: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 12 },
   modalTitulo: { color: colors.texto, fontSize: 18, fontWeight: '800' },
   input: { backgroundColor: colors.card2, color: colors.texto, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border },
+  senhaRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card2, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingRight: 6 },
+  senhaInput: { flex: 1, color: colors.texto, padding: 12 },
+  olhoBtn: { padding: 8 },
   modalDica: { color: colors.textoFraco, fontSize: 11, lineHeight: 15 },
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
 });
