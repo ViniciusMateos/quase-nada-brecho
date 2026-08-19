@@ -146,20 +146,9 @@ export function InstagramLoginScreen() {
     }
   }
 
-  // Auto-captura: quando o sessionid aparecer (login OK, na hora ou depois do captcha/checkpoint),
-  // captura sozinho. Só no modo auto. Manual continua no botão.
-  useEffect(() => {
-    if (!CookieManager || !autoLogin || !limpo) return;
-    const iv = setInterval(async () => {
-      if (jaCapturou.current) { clearInterval(iv); return; }
-      try {
-        const c = await CookieManager!.get('https://www.instagram.com', true);
-        if (c && c.sessionid && c.sessionid.value) { clearInterval(iv); capturar(); }
-      } catch { /* segue tentando */ }
-    }, 2000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLogin, limpo]);
+  // NÃO auto-captura (igual ao app de bots): o webview preenche login/senha e faz o login,
+  // mas a captura da sessão só acontece quando VOCÊ toca em "Conectar". Assim dá pra resolver
+  // captcha/checkpoint/confirmar email ANTES de conectar — e não captura uma sessão inválida.
 
   return (
     <View style={styles.tela}>
