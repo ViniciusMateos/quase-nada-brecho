@@ -14,7 +14,7 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro'];
+const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro', 'sem_sessao'];
 
 export function SincronizarScreen() {
   const { colors } = useTheme();

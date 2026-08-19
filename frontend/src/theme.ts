@@ -69,5 +69,6 @@ export function statusCor(c: Cores): Record<string, string> {
     finalizado: c.ok,
     parado: c.textoFraco,
     erro: c.erro,
+    sem_sessao: c.alerta,   // não é falha: sessão do IG expirou, é só reconectar
   };
 }

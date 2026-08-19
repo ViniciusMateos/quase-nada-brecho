@@ -118,7 +118,7 @@ function parseProgresso(txt: string): Progresso | null {
   return { done: parseInt(m[1], 10), total: parseInt(m[2], 10), label: m[3].trim() };
 }
 
-const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro'];
+const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro', 'sem_sessao'];
 
 export function RunScreen() {
   const { colors } = useTheme();

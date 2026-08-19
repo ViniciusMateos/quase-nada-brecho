@@ -19,6 +19,37 @@ from playwright.sync_api import sync_playwright
 import config
 
 
+class SessaoInvalida(Exception):
+    """A página do perfil não é o feed — é login/checkpoint/bloqueio do IG. NÃO é raspagem
+    incompleta nem lentidão: a sessão precisa ser reconectada. O main trata como 'sem sessão'."""
+
+
+def _motivo_pagina(page):
+    """Quando o grid do feed NÃO aparece, olha a URL + o conteúdo pra dizer o QUE é de verdade:
+    login (sessão inválida), checkpoint/verificação, conta indisponível, ou só página lenta.
+    Retorna (categoria, texto). categoria in {sessao, checkpoint, indisponivel, lento}."""
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    try:
+        html = (page.content() or "").lower()
+    except Exception:
+        html = ""
+    if "/accounts/login" in url or 'name="username"' in html or "loginform" in html \
+            or "log in to see" in html or "entre para ver" in html:
+        return ("sessao", "Caiu na tela de login — a sessão do Instagram é inválida/expirou.")
+    if "/challenge" in url or "/checkpoint" in url or "challenge_required" in html \
+            or "confirme que é você" in html or "confirm it's you" in html \
+            or "we've detected" in html or "detectamos" in html or "suspicious" in html \
+            or "unusual" in html or "incomum" in html:
+        return ("checkpoint", "O Instagram pediu verificação (checkpoint/confirmar identidade).")
+    if "isn't available" in html or "não está disponível" in html or "sorry, this page" in html \
+            or "página não está" in html or "page not found" in html:
+        return ("indisponivel", "A página do perfil não está disponível (conta bloqueada/removida?).")
+    return ("lento", "O grid do feed não renderizou a tempo (página lenta ou layout mudou).")
+
+
 # ───────────────────────────── log ─────────────────────────────
 def setup_logger():
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
@@ -359,7 +390,12 @@ class IG:
                 self.page.wait_for_selector('a[href*="/p/"], a[href*="/reel/"]', timeout=20000)
                 self.page.wait_for_timeout(800)    # deixa o grid assentar
             except Exception:
-                log.warning("Grid do feed não apareceu a tempo — sigo mesmo assim.")
+                # grid não apareceu → descobre o PORQUÊ real (não printa "grid não apareceu" seco).
+                motivo, txt = _motivo_pagina(self.page)
+                if motivo in ("sessao", "checkpoint", "indisponivel"):
+                    # não é peça faltando nem lentidão — é a sessão/conta que precisa reconectar.
+                    raise SessaoInvalida(txt)
+                log.warning("Grid do feed não apareceu: %s — sigo mesmo assim.", txt)
                 self.page.wait_for_timeout(3000)
             # sem total pela API (web_profile_info bugado) → tenta ler da página aberta
             # (best-effort; se não achar, segue sem %). Já estamos no perfil, sem nav extra.

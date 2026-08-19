@@ -57,6 +57,7 @@ _TEXTOS = {
             "inicio": ("Raspando o brechó", "Começando a descer o feed… te mostro o progresso."),
             "fim_ok": ("Brechó atualizado", "Raspagem concluída e planilha sincronizada."),
             "fim_erro": ("Deu ruim", "O scraper do brechó parou com erro."),
+            "fim_sem_sessao": ("Sem sessão", "A sessão do Instagram expirou — reconecte no app pra raspar."),
             "fim_parado": ("Parado", "O scraper do brechó foi parado."),
         },
         "en": {
@@ -64,6 +65,7 @@ _TEXTOS = {
             "inicio": ("Scraping the thrift", "Starting to scroll the feed… I'll show the progress."),
             "fim_ok": ("Thrift updated", "Scrape done and sheet synced."),
             "fim_erro": ("Something went wrong", "The thrift scraper stopped with an error."),
+            "fim_sem_sessao": ("No session", "The Instagram session expired — reconnect in the app to scrape."),
             "fim_parado": ("Stopped", "The thrift scraper was stopped."),
         },
     },
@@ -73,6 +75,7 @@ _TEXTOS = {
             "inicio": ("Conectando Instagram", "Importando a sessão e validando o login…"),
             "fim_ok": ("Instagram conectado", "Sessão salva — já pode raspar o brechó."),
             "fim_erro": ("Deu ruim", "Não consegui conectar o Instagram."),
+            "fim_sem_sessao": ("Sem sessão", "A sessão do Instagram expirou — reconecte no app."),
             "fim_parado": ("Parado", "A conexão do Instagram foi parada."),
         },
         "en": {
@@ -80,6 +83,7 @@ _TEXTOS = {
             "inicio": ("Connecting Instagram", "Importing the session and checking the login…"),
             "fim_ok": ("Instagram connected", "Session saved — you can scrape now."),
             "fim_erro": ("Something went wrong", "Couldn't connect Instagram."),
+            "fim_sem_sessao": ("No session", "The Instagram session expired — reconnect in the app."),
             "fim_parado": ("Stopped", "The Instagram connection was stopped."),
         },
     },
@@ -100,7 +104,7 @@ class Run:
         self.id = f"run-{next(_counter)}"
         self.params = params or {}
         self.lang = self.params.get("lang") or "pt"   # idioma do app (notificações/LA)
-        self.status = "iniciando"      # iniciando | rodando | finalizado | parado | erro
+        self.status = "iniciando"      # iniciando | rodando | finalizado | parado | erro | sem_sessao
         self.started_at = time.time()
         self.ended_at = None
         self.returncode = None
@@ -185,7 +189,12 @@ class RunManager:
         run.returncode = await run.proc.wait()
         run.ended_at = time.time()
         if run.status != "parado":
-            run.status = "finalizado" if run.returncode == 0 else "erro"
+            if run.returncode == 0:
+                run.status = "finalizado"
+            elif run.returncode == 3:
+                run.status = "sem_sessao"   # worker saiu com code 3 = sessão do IG expirou
+            else:
+                run.status = "erro"
 
         # raspagem OK → dry-run: PRÉVIA do app (rollback); normal: importa de verdade
         if run.status == "finalizado" and not run.params.get("import_cookies"):
@@ -317,12 +326,15 @@ class RunManager:
                 ok, det = await asyncio.to_thread(
                     liveactivity.encerrar, run.la_token, 100,
                     p.get("done", 0), p.get("total", 0),
-                    "concluído" if run.status == "finalizado" else run.status,
+                    "concluído" if run.status == "finalizado"
+                    else ("sem sessão" if run.status == "sem_sessao" else run.status),
                     run.la_bundle)
                 print(f"[la] end {run.id} -> ok={ok} {det}", flush=True)
             except Exception as e:
                 print(f"[la] end {run.id} EXC {e}", flush=True)
-        if run.status == "erro":
+        if run.status == "sem_sessao":
+            titulo, corpo = info["fim_sem_sessao"]
+        elif run.status == "erro":
             titulo, corpo = info["fim_erro"]
         elif run.status == "parado":
             titulo, corpo = info["fim_parado"]

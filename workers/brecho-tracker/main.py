@@ -26,7 +26,7 @@ import sys
 import time
 
 import config
-from iglib import IG, carregar_cookies, log
+from iglib import IG, carregar_cookies, log, SessaoInvalida
 import parser
 import planilha
 
@@ -144,11 +144,12 @@ def run(dry=False, full=False):
         _reinjetar_sessao(ig)
         ig.ir("https://www.instagram.com/")
         if not ig.logado():
-            # sessão ausente/expirada NÃO é "nada a atualizar" — é falha: precisa reconectar.
-            # Levanta pra virar ERRO visível (exit != 0) em vez de "finalizado" mentindo sucesso.
-            raise RuntimeError(
-                "Sem sessão logada — a sessão do Instagram expirou ou não foi importada. "
-                "Reconecte o Instagram no app e rode de novo.")
+            # sessão ausente/expirada NÃO é "erro" nem "finalizado" — é um estado próprio
+            # ("sem sessão"): o app deve pedir pra reconectar o Instagram, sem tom de falha.
+            # Código de saída 3 = dedicado a isso (o run_manager traduz pro status "sem_sessao").
+            log.warning("Sem sessão logada — a sessão do Instagram expirou ou não foi importada. "
+                        "Reconecte o Instagram no app.")
+            sys.exit(3)
         ig.carregar_tokens()
         pecas = raspar(ig, boundary)
         # (sem download de fotos: o app usa o link da CDN direto; a foto de upload local
@@ -200,6 +201,11 @@ def main():
         run(dry=a.dry_run, full=a.full)
     except KeyboardInterrupt:
         log.info("Interrompido.")
+    except SessaoInvalida as e:
+        # sessão inválida/checkpoint/conta indisponível = "sem sessão" (exit 3), não erro:
+        # o app pede pra reconectar o Instagram em vez de "deu ruim".
+        log.warning("%s Reconecte o Instagram no app.", e)
+        sys.exit(3)
     except Exception as e:
         log.error("erro: %s", e)
         import traceback
