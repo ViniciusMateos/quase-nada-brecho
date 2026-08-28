@@ -63,8 +63,11 @@ def modo_importar_cookies(path):
         if ig.importar_cookies(cookies):
             log.info("Sessão logada! Rode `python main.py --dry-run`.")
         else:
-            log.warning("Importou, mas não achei sessionid. Exporte os cookies do instagram.com "
-                        "COM uma conta logada.")
+            # não confirmou nem depois do retry: reporta "sem sessão" (exit 3) em vez de fingir
+            # que conectou — o run_manager traduz pro status sem_sessao e o app pede pra reconectar.
+            log.warning("Importei os cookies mas não confirmei a sessão (o Instagram não validou "
+                        "o login). Reconecte o Instagram no app.")
+            sys.exit(3)
 
 
 def raspar(ig, boundary):

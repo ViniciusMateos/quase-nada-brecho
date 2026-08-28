@@ -216,10 +216,30 @@ class IG:
     def logado(self):
         return bool(self._cookies().get("sessionid"))
 
-    def importar_cookies(self, cookies):
-        self.ctx.add_cookies(cookies)
-        self.ir("https://www.instagram.com/")
-        return self.logado()
+    def importar_cookies(self, cookies, tentativas=3):
+        """Injeta os cookies e confirma a sessão navegando pro IG. RETRY com backoff porque
+        o IG costuma INVALIDAR uma sessão recém-criada no 1º acesso vindo de um IP diferente
+        (o celular criou a sessão; o worker abre de outro IP/proxy) — ele responde deslogado
+        e apaga o sessionid. Isso é transitório: alguns minutos depois a mesma sessão vale.
+        Então re-injeta (o IG apagou os cookies) + re-navega algumas vezes antes de desistir,
+        pra não reportar 'sem sessão' com cookies perfeitos. Se o jar nem tem sessionid, é
+        sem-sessão de verdade (o app não capturou login) → nem tenta."""
+        if not any(c.get("name") == "sessionid" and c.get("value") for c in cookies):
+            log.warning("Os cookies recebidos não têm sessionid — não houve login de fato.")
+            return False
+        for i in range(tentativas):
+            self.ctx.add_cookies(cookies)          # re-injeta: o IG pode ter apagado na tentativa anterior
+            self.ir("https://www.instagram.com/")
+            if self.logado():
+                if i:
+                    log.info("Sessão confirmada na tentativa %d.", i + 1)
+                return True
+            if i < tentativas - 1:
+                espera = 15 * (i + 1)              # 15s, 30s… deixa o IG assentar a sessão nova
+                log.info("Sessão não confirmou (%d/%d) — o IG pode estar validando a sessão nova; "
+                         "espero %ds e tento de novo.", i + 1, tentativas, espera)
+                self.page.wait_for_timeout(espera * 1000)
+        return False
 
     def carregar_tokens(self):
         ck = self._cookies()
