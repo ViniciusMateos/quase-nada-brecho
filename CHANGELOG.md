@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.1] — 2026-08-28
+
+### Corrigido
+- fix: **reconectar o Instagram não falha mais à toa** — o IG invalida uma sessão recém-criada no 1º acesso de um IP diferente (o celular cria a sessão, o worker abre pelo proxy) e apaga o sessionid; antes isso virava "sem sessão" mesmo com os cookies perfeitos. Agora a validação **re-injeta + re-navega 3× com backoff** (15s, 30s) antes de desistir, e só reporta **sem sessão** (exit 3) quando a sessão realmente não valida — em vez de fingir que "conectou"
+
+### Notas
+- Mudança só no worker (deploy por `scp`); sem OTA e sem mudança nativa. `runtimeVersion` segue `1.0.0`.
+
 ## [1.6.0] — 2026-08-19
 
 ### Adicionado
