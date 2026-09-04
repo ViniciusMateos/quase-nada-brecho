@@ -12,11 +12,13 @@ O worker em si (main.py, iglib.py, parser.py, planilha.py) é o mesmo que rodava
 no Quase Nada Bots — foi movido pra cá sem alteração.
 """
 import json
+import subprocess
 from datetime import date, datetime
 
 import settings
 
 COOKIES_FILE = "imported_cookies.json"
+META_FILE = "imported_cookies.meta.json"
 PLANILHA = "brecho_tracker.xlsx"
 
 # posição das colunas na aba "peças" (mesmo layout gerado pelo worker)
@@ -50,6 +52,60 @@ def salvar_cookies(cookies):
     (settings.WORKER_DIR / COOKIES_FILE).write_text(
         json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
     return COOKIES_FILE
+
+
+def salvar_meta(usuario):
+    """Guarda QUEM conectou (só o @usuário + quando) pro app mostrar no cartão de status.
+    Login/senha NUNCA vêm pro servidor — o @usuário é público e serve só de rótulo."""
+    if not usuario:
+        return
+    (settings.WORKER_DIR / META_FILE).write_text(
+        json.dumps({"usuario": str(usuario).lstrip("@").strip(),
+                    "conectado_em": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                   ensure_ascii=False), encoding="utf-8")
+
+
+def ler_meta():
+    f = settings.WORKER_DIR / META_FILE
+    if not f.exists():
+        return {}
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def tem_sessao():
+    """Existe sessão salva com sessionid? (NÃO bate no IG — só olha o arquivo, instantâneo)."""
+    f = settings.WORKER_DIR / COOKIES_FILE
+    if not f.exists():
+        return False
+    try:
+        ck = json.loads(f.read_text(encoding="utf-8"))
+        if isinstance(ck, dict) and "cookies" in ck:
+            ck = ck["cookies"]
+        return any(str(c.get("name")) == "sessionid" and c.get("value") for c in ck)
+    except Exception:
+        return False
+
+
+def checar_sessao():
+    """Roda o worker em modo --check-session (valida a sessão salva AO VIVO, sem raspar).
+    Devolve 'ok' | 'sem_sessao' | 'erro'. Bloqueante (abre um mini-browser ~10-20s) —
+    chame via asyncio.to_thread pra não travar o event loop."""
+    if not tem_sessao():
+        return "sem_sessao"
+    try:
+        r = subprocess.run(
+            [str(settings.PYTHON_BIN), "main.py", "--check-session"],
+            cwd=str(settings.WORKER_DIR), capture_output=True, text=True, timeout=150)
+    except subprocess.TimeoutExpired:
+        return "erro"
+    if r.returncode == 0:
+        return "ok"
+    if r.returncode == 3:
+        return "sem_sessao"
+    return "erro"
 
 
 # ─────────────────── import da planilha → SQLite ─────────────────

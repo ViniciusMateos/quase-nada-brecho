@@ -249,8 +249,31 @@ async def conectar_instagram(payload: dict):
     if not any(str(c.get("name")) == "sessionid" for c in cookies):
         raise HTTPException(400, "cookies sem 'sessionid' — sessão não está logada")
     arquivo = scraper.salvar_cookies(cookies)
+    scraper.salvar_meta(payload.get("usuario"))   # rótulo da conta (só o @usuário) pro cartão de status
     run = await mgr.start({"import_cookies": arquivo, "lang": payload.get("lang") or "pt"})
     return {"runs": [{"id": run.id}]}
+
+
+@app.get("/instagram/status", dependencies=[Depends(auth)])
+async def instagram_status():
+    """Estado da sessão salva SEM bater no IG (instantâneo): tem sessão? de qual conta?"""
+    meta = scraper.ler_meta()
+    return {"conectado": scraper.tem_sessao(),
+            "usuario": meta.get("usuario"),
+            "conectado_em": meta.get("conectado_em")}
+
+
+@app.post("/instagram/verificar", dependencies=[Depends(auth)])
+async def instagram_verificar():
+    """Checa AO VIVO se a sessão salva ainda loga (abre um mini-browser ~10-20s no worker).
+    Não roda junto de uma raspagem (evita dois Chromes no server) → 409."""
+    if any(r.status in ("rodando", "iniciando") and not r.params.get("import_cookies")
+           for r in mgr.runs.values()):
+        raise HTTPException(409, "Tem raspagem rodando — espera terminar pra verificar.")
+    resultado = await asyncio.to_thread(scraper.checar_sessao)
+    meta = scraper.ler_meta()
+    return {"resultado": resultado, "usuario": meta.get("usuario"),
+            "conectado": scraper.tem_sessao()}
 
 
 # ─────────────────────── push (devices) ──────────────────────────

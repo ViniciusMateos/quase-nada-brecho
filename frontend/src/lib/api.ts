@@ -98,6 +98,8 @@ export type IgCookie = {
   httpOnly?: boolean; secure?: boolean; sameSite?: string; session?: boolean; expirationDate?: number;
 };
 export type ConnectResult = { runs: { id: string }[] };
+export type IgStatus = { conectado: boolean; usuario: string | null; conectado_em: string | null };
+export type IgVerificar = { resultado: 'ok' | 'sem_sessao' | 'erro'; usuario: string | null; conectado: boolean };
 
 export const api = {
   // dashboard — período opcional (janela de vendas, YYYY-MM-DD)
@@ -135,7 +137,10 @@ export const api = {
   setLiveActivity: (runId: string, token: string, bundle?: string) =>
     http.post(`/runs/${runId}/liveactivity`, { token, bundle }),
   importarPlanilha: () => http.post<ImportStats>('/scraper/importar'),
-  connectInstagram: (cookies: IgCookie[]) => http.post<ConnectResult>('/instagram/session', { cookies, lang: getLang() }),
+  connectInstagram: (cookies: IgCookie[], usuario?: string) =>
+    http.post<ConnectResult>('/instagram/session', { cookies, usuario, lang: getLang() }),
+  igStatus: () => http.get<IgStatus>('/instagram/status'),
+  igVerificar: () => http.post<IgVerificar>('/instagram/verificar'),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),
 };
 

@@ -26,7 +26,7 @@ import sys
 import time
 
 import config
-from iglib import IG, carregar_cookies, log, SessaoInvalida
+from iglib import IG, carregar_cookies, log, SessaoInvalida, sessao_valida_http
 import parser
 import planilha
 
@@ -186,6 +186,29 @@ def rematch():
     log.info("Rematch: %d valores (compra/venda) preenchidos pela antiga. Planilha atualizada.", n)
 
 
+def checar_sessao():
+    """Valida se a sessão salva ainda está logada — SEM raspar e SEM abrir browser: uma
+    requisição HTTP na home do IG (iglib.sessao_valida_http, ~1-2s). exit 0 = logado,
+    3 = sem sessão, 2 = inconclusivo. Alimenta o cartão de status ("dá pra rodar?").
+    Se der inconclusivo (rede/limite), tenta 1× mais rápido antes de desistir."""
+    if not os.path.exists(COOKIES_FILE):
+        log.warning("Sem sessão salva pra checar.")
+        sys.exit(3)
+    cookies = carregar_cookies(COOKIES_FILE)
+    for i in range(2):
+        r = sessao_valida_http(cookies)
+        if r is True:
+            log.info("Sessão OK — dá pra raspar.")
+            return
+        if r is False:
+            log.warning("Sessão inválida ou expirada — reconecte o Instagram.")
+            sys.exit(3)
+        if i == 0:
+            time.sleep(4)                 # inconclusivo (rede/limite) → um respiro e tenta de novo
+    log.warning("Não consegui confirmar a sessão agora (rede ou limite do IG). Tente de novo.")
+    sys.exit(2)
+
+
 def main():
     ap = argparse.ArgumentParser(description="brecho-tracker")
     ap.add_argument("--import-cookies", metavar="FILE", help="importa cookies e loga")
@@ -193,9 +216,14 @@ def main():
     ap.add_argument("--full", action="store_true", help="ignora o boundary e raspa o feed inteiro")
     ap.add_argument("--rematch", action="store_true",
                     help="sem raspar: preenche compra/venda faltantes pela planilha antiga")
+    ap.add_argument("--check-session", action="store_true",
+                    help="valida a sessão salva (sem raspar); exit 0=ok, 3=sem sessão")
     a = ap.parse_args()
     if a.import_cookies:
         modo_importar_cookies(a.import_cookies)
+        return
+    if a.check_session:
+        checar_sessao()
         return
     if a.rematch:
         rematch()

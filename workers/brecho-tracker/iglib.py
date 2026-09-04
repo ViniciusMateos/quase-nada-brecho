@@ -138,6 +138,41 @@ def carregar_cookies(path):
     return out
 
 
+def sessao_valida_http(cookies, timeout_ms=15000):
+    """Confere se a sessão está logada com UMA requisição HTTP — SEM abrir browser (~1-2s
+    vs ~30s do Chromium). Bate na home do IG (pelo mesmo proxy socks5) com os cookies no
+    header e procura o `ds_user_id` no HTML (marcador de logado) / a classe 'not-logged-in'
+    (marcador de deslogado). Retorna True (logada), False (deslogada) ou None (inconclusivo:
+    rede/limite — não afirma nada)."""
+    ck = {c["name"]: c["value"] for c in cookies}
+    if not ck.get("sessionid"):
+        return False
+    uid = ck.get("ds_user_id")
+    cookie_header = "; ".join(k + "=" + v for k, v in ck.items())
+    try:
+        with sync_playwright() as p:
+            kw = {"proxy": config.PROXY} if getattr(config, "PROXY", None) else {}
+            req = p.request.new_context(user_agent=config.USER_AGENT, **kw)
+            try:
+                r = req.get("https://www.instagram.com/",
+                            headers={"Cookie": cookie_header, "X-IG-App-ID": config.IG_APP_ID,
+                                     "Referer": "https://www.instagram.com/"},
+                            timeout=timeout_ms)
+                status, body = r.status, r.text()
+            finally:
+                req.dispose()
+    except Exception as e:
+        log.warning("Checagem HTTP da sessão falhou: %s", e)
+        return None
+    if status != 200:
+        return None
+    if uid and uid in body:
+        return True                      # o próprio id do usuário no HTML = logado de fato
+    if "not-logged-in" in body:
+        return False
+    return None                          # sem marcador claro → não arrisca um veredito
+
+
 class IG:
     def __init__(self):
         self._pw = None

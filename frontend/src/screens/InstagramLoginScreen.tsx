@@ -135,7 +135,7 @@ export function InstagramLoginScreen() {
     });
     try {
       jaCapturou.current = true;
-      const res = await api.connectInstagram(cookies);
+      const res = await api.connectInstagram(cookies, usuario);
       if (!res.runs?.length) throw new Error('sem runs');
       await iniciarLAparaRun(res.runs[0].id, 'Conectando Instagram');
       nav.replace('Run', { runId: res.runs[0].id, nome: 'Conectar Instagram' });
