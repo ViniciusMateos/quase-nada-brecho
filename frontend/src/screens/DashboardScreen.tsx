@@ -10,6 +10,7 @@ import { traduzCategoria } from '@/i18n/categorias';
 import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
 import { Aparece, Card } from '@/ui/components';
+import { InfoAjuda } from '@/ui/InfoAjuda';
 import { CalendarioFaixa } from '@/ui/CalendarioFaixa';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
@@ -126,22 +127,22 @@ export function DashboardScreen() {
       <Animated.View style={[styles.conteudo, { opacity: conteudoOp }]}>
       <Aparece>
         <View style={styles.heroGrid}>
-          <Hero titulo={t('dashboard.faturamento')} valor={brl(k.faturamento)} cor={colors.ok} />
-          <Hero titulo={t('dashboard.lucro')} valor={brl(k.lucro)} cor={colors.amarelo} rodape={t('dashboard.margem', { p: pct(k.margem_pct) })} />
-          <Hero titulo={t('dashboard.roi')} valor={pct(k.roi_pct)} cor={colors.laranja} rodape={t('dashboard.retornoCusto')} />
-          <Hero titulo={t('dashboard.taxaVenda')} valor={pct(k.taxa_venda)} cor={colors.rosa} rodape={t('dashboard.pecasFrac', { v: k.vendidas, t: k.total })} />
+          <Hero titulo={t('dashboard.faturamento')} valor={brl(k.faturamento)} cor={colors.ok} ajuda="faturamento" />
+          <Hero titulo={t('dashboard.lucro')} valor={brl(k.lucro)} cor={colors.amarelo} rodape={t('dashboard.margem', { p: pct(k.margem_pct) })} ajuda="lucro" ajudaRodape="margem" />
+          <Hero titulo={t('dashboard.roi')} valor={pct(k.roi_pct)} cor={colors.laranja} rodape={t('dashboard.retornoCusto')} ajuda="roi" />
+          <Hero titulo={t('dashboard.taxaVenda')} valor={pct(k.taxa_venda)} cor={colors.rosa} rodape={t('dashboard.pecasFrac', { v: k.vendidas, t: k.total })} ajuda="taxaVenda" />
         </View>
       </Aparece>
 
       <Aparece delay={60}>
         <Card style={{ gap: 2 }}>
           <Secao>{t('dashboard.vendas')}</Secao>
-          <Metric label={t('dashboard.projecaoTotal')} valor={brl(k.faturamento + k.estoque_valor)} destaque />
+          <Metric label={t('dashboard.projecaoTotal')} valor={brl(k.faturamento + k.estoque_valor)} destaque ajuda="projecao" />
           <Metric label={t('dashboard.pecasVendidas')} valor={`${k.vendidas}`} />
-          <Metric label={t('dashboard.ticketMedio')} valor={brl(k.ticket_medio)} />
-          <Metric label={t('dashboard.custoMedio')} valor={brl(k.custo_medio)} />
-          <Metric label={t('dashboard.cmv')} valor={brl(k.cmv)} />
-          <Metric label={t('dashboard.investidoTotal')} valor={brl(k.investido_total)} />
+          <Metric label={t('dashboard.ticketMedio')} valor={brl(k.ticket_medio)} ajuda="ticketMedio" />
+          <Metric label={t('dashboard.custoMedio')} valor={brl(k.custo_medio)} ajuda="custoMedio" />
+          <Metric label={t('dashboard.cmv')} valor={brl(k.cmv)} ajuda="cmv" />
+          <Metric label={t('dashboard.investidoTotal')} valor={brl(k.investido_total)} ajuda="investido" />
         </Card>
       </Aparece>
 
@@ -149,9 +150,9 @@ export function DashboardScreen() {
         <Card style={{ gap: 2 }}>
           <Secao>{t('dashboard.estoque')}</Secao>
           <Metric label={t('dashboard.pecasDisponiveis')} valor={`${k.disponiveis}`} />
-          <Metric label={t('dashboard.valorParado')} valor={brl(k.estoque_valor)} />
+          <Metric label={t('dashboard.valorParado')} valor={brl(k.estoque_valor)} ajuda="valorParado" />
           <Metric label={t('dashboard.custoEstoque')} valor={brl(k.estoque_custo)} />
-          <Metric label={t('dashboard.lucroPotencial')} valor={brl(k.estoque_lucro_potencial)} destaque />
+          <Metric label={t('dashboard.lucroPotencial')} valor={brl(k.estoque_lucro_potencial)} destaque ajuda="lucroPotencial" />
         </Card>
       </Aparece>
 
@@ -218,14 +219,23 @@ function PillP({ on, onPress, icon, children }: {
   );
 }
 
-function Hero({ titulo, valor, cor, rodape }: { titulo: string; valor: string; cor: string; rodape?: string }) {
+function Hero({ titulo, valor, cor, rodape, ajuda, ajudaRodape }:
+  { titulo: string; valor: string; cor: string; rodape?: string; ajuda?: string; ajudaRodape?: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.hero, { borderLeftColor: cor }]}>
-      <Text style={styles.heroTitulo}>{titulo}</Text>
+      <View style={styles.heroTituloRow}>
+        <Text style={styles.heroTitulo} numberOfLines={1}>{titulo}</Text>
+        {ajuda ? <InfoAjuda termo={ajuda} /> : null}
+      </View>
       <Text style={styles.heroValor} numberOfLines={1} adjustsFontSizeToFit>{valor}</Text>
-      {rodape ? <Text style={styles.heroRodape}>{rodape}</Text> : null}
+      {rodape ? (
+        <View style={styles.heroRodapeRow}>
+          <Text style={styles.heroRodape} numberOfLines={1}>{rodape}</Text>
+          {ajudaRodape ? <InfoAjuda termo={ajudaRodape} size={13} /> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -236,12 +246,15 @@ const Secao = ({ children }: { children: React.ReactNode }) => {
   return <Text style={styles.secao}>{children}</Text>;
 };
 
-function Metric({ label, valor, destaque }: { label: string; valor: string; destaque?: boolean }) {
+function Metric({ label, valor, destaque, ajuda }: { label: string; valor: string; destaque?: boolean; ajuda?: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <View style={styles.metricLabelRow}>
+        <Text style={styles.metricLabel}>{label}</Text>
+        {ajuda ? <InfoAjuda termo={ajuda} size={14} /> : null}
+      </View>
       <Text style={[styles.metricValor, destaque && { color: colors.ok }]}>{valor}</Text>
     </View>
   );
@@ -295,12 +308,15 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   pillTxtOn: { color: '#FFFFFF', fontWeight: '800' },
   heroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   hero: { flexBasis: '48%', flexGrow: 1, backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4 },
-  heroTitulo: { color: colors.textoFraco, fontSize: 11, textTransform: 'uppercase', fontWeight: '700' },
+  heroTituloRow: { flexDirection: 'row', alignItems: 'center' },
+  heroTitulo: { color: colors.textoFraco, fontSize: 11, textTransform: 'uppercase', fontWeight: '700', flexShrink: 1 },
   heroValor: { color: colors.texto, fontSize: 22, fontWeight: '800', marginTop: 4 },
-  heroRodape: { color: colors.textoFraco, fontSize: 11, marginTop: 2 },
+  heroRodapeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  heroRodape: { color: colors.textoFraco, fontSize: 11, flexShrink: 1 },
   secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 },
   metric: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  metricLabel: { color: colors.textoFraco, fontSize: 13, flex: 1 },
+  metricLabelRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  metricLabel: { color: colors.textoFraco, fontSize: 13, flexShrink: 1 },
   metricValor: { color: colors.texto, fontSize: 15, fontWeight: '700' },
   tabLinha: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
   tabHead: { color: colors.textoFraco, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },

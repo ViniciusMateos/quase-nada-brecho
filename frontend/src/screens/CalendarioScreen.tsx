@@ -11,6 +11,7 @@ import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
 import { useI18n } from '@/i18n';
 import { Aparece } from '@/ui/components';
+import { InfoAjuda } from '@/ui/InfoAjuda';
 import { EditorPeca } from '@/ui/EditorPeca';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
@@ -195,26 +196,41 @@ export function CalendarioScreen() {
               <SetaBtn dir={1} onPress={() => irMes(1)} styles={styles} colors={colors} />
             </View>
             <Animated.View style={{ opacity: gridOp }}>
-              <Text style={styles.fatLabel}>{t('calendario.revenue')}</Text>
+              <View style={styles.fatLabelRow}>
+                <Text style={styles.fatLabel}>{t('calendario.revenue')}</Text>
+                <InfoAjuda termo="faturamento" size={14} />
+              </View>
               <Text style={styles.fatValor}>{brl(totalMes)}</Text>
               <Text style={styles.fatSub}>{t('calendario.salesCount', { n: qtdMes })}</Text>
               <View style={styles.statsRow}>
                 <View style={styles.statCol}>
-                  <Text style={styles.statLabel}>{t('calendario.profit')}</Text>
+                  <View style={styles.statLabelRow}>
+                    <Text style={styles.statLabel}>{t('calendario.profit')}</Text>
+                    <InfoAjuda termo="lucro" size={12} />
+                  </View>
                   <Text style={[styles.statValor, { color: lucroMes >= 0 ? colors.ok : colors.erro }]}>
                     {lucroMes < 0 ? '-' : ''}{brl(lucroMes)}
                   </Text>
                 </View>
                 <View style={styles.statCol}>
-                  <Text style={styles.statLabel}>{t('calendario.margin')}</Text>
+                  <View style={styles.statLabelRow}>
+                    <Text style={styles.statLabel}>{t('calendario.margin')}</Text>
+                    <InfoAjuda termo="margem" size={12} />
+                  </View>
                   <Text style={[styles.statValor, { color: colors.texto }]}>{margemMes}%</Text>
                 </View>
                 <View style={styles.statCol}>
-                  <Text style={styles.statLabel}>{t('calendario.roi')}</Text>
+                  <View style={styles.statLabelRow}>
+                    <Text style={styles.statLabel}>{t('calendario.roi')}</Text>
+                    <InfoAjuda termo="roi" size={12} />
+                  </View>
                   <Text style={[styles.statValor, { color: colors.laranja }]}>{roiMes}%</Text>
                 </View>
                 <View style={styles.statCol}>
-                  <Text style={styles.statLabel}>{t('calendario.spend')}</Text>
+                  <View style={styles.statLabelRow}>
+                    <Text style={styles.statLabel}>{t('calendario.spend')}</Text>
+                    <InfoAjuda termo="gasto" size={12} />
+                  </View>
                   <Text style={[styles.statValor, { color: colors.textoFraco }]}>{brl(gastoMes)}</Text>
                 </View>
               </View>
@@ -313,11 +329,13 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   mesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   setaBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card2, alignItems: 'center', justifyContent: 'center' },
   mesTxt: { color: colors.texto, fontSize: 18, fontWeight: '800', textTransform: 'capitalize' },
-  fatLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginTop: 14 },
+  fatLabelRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
+  fatLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
   fatValor: { color: colors.ok, fontSize: 30, fontWeight: '900', marginTop: 2 },
   fatSub: { color: colors.textoFraco, fontSize: 13, marginTop: 2 },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   statCol: { width: '50%', paddingVertical: 6 },
+  statLabelRow: { flexDirection: 'row', alignItems: 'center' },
   statLabel: { color: colors.textoFraco, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   statValor: { fontSize: 19, fontWeight: '800', marginTop: 3 },
   semanaRow: { flexDirection: 'row', marginBottom: 4 },

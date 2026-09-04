@@ -9,10 +9,11 @@ import * as sync from './packs/sync';
 import * as run from './packs/run';
 import * as historico from './packs/historico';
 import * as common from './packs/common';
+import * as ajuda from './packs/ajuda';
 
 // Idioma da INTERFACE. Conteúdo do usuário (nome de peça, etc.) NÃO é traduzido.
 // Dicionário = base (hub/settings/nav) + packs por domínio (cada tela tem o seu).
-const PACKS = [{ pt: PT, en: EN }, pecas, editor, drops, dashboard, sync, run, historico, common];
+const PACKS = [{ pt: PT, en: EN }, pecas, editor, drops, dashboard, sync, run, historico, common, ajuda];
 const DICTS: Record<string, Dict> = {
   pt: Object.assign({}, ...PACKS.map((p) => p.pt)),
   en: Object.assign({}, ...PACKS.map((p) => p.en)),
