@@ -60,7 +60,10 @@ quase-nada-brecho/
   (peças consignadas entram só pela % que fica pra você); as linhas de categoria são atalho
   pra tela de peças já filtrada. **Filtro por período** (pills Tudo/30 dias/Este ano/Ano
   passado + um **calendário de faixa** personalizado): as métricas de venda passam a considerar
-  só o que vendeu na janela (pela data da venda); o estoque segue como snapshot atual.
+  só o que vendeu na janela (pela data da venda); o estoque segue como snapshot atual. As
+  métricas menos óbvias (margem, ROI, taxa de venda, CMV, ticket médio…) têm um **"i"** do
+  lado que abre uma explicação rápida do termo (o que é, a fórmula, um exemplo) — no Dashboard
+  e no Calendário.
 - **Calendário de vendas** — calendário navegável por mês que mostra as **vendas por dia** e,
   no topo, **faturamento, lucro, margem e ROI** do mês. Cada peça vendida guarda a **data da
   venda** (editável; quando é estimada — backfill/scraper — pede confirmação); tocar numa
@@ -85,7 +88,10 @@ quase-nada-brecho/
   recaptura as fotos, pra quando um link do Insta expira). Não deixa **duas raspagens ao
   mesmo tempo**, tem **logs ao vivo** (WebSocket + UI animada), barra de progresso e
   **Live Activity** (anel de progresso na tela de bloqueio / ilha dinâmica). Peças
-  **manuais/travadas** o scraper nunca mexe.
+  **manuais/travadas** o scraper nunca mexe. No topo, um **cartão de status da conta**
+  mostra qual **@conta** está conectada e se a **sessão está viva** (verde "pode rodar" /
+  vermelho "reconecte") — a checagem ao vivo bate no IG por uma **requisição HTTP** (~2s,
+  sem abrir navegador), pra você saber de cara se dá pra raspar ou se precisa reconectar.
   Se as peças de um **drop manual** aparecem no Insta, o app entende que o drop foi
   publicado: mantém as peças no drop, marca-o como **publicado** e **sincroniza a data**
   com o post.
@@ -93,8 +99,10 @@ quase-nada-brecho/
   "cortina" no app inteiro) e **idioma PT/EN** (troca com a animação de embaralhar as
   letras). As categorias traduzem por dicionário (pela 1ª palavra do nome) e o filtro
   reordena alfabético pelo idioma ativo. As **notificações** também saem no idioma
-  escolhido (o app manda o idioma, o backend responde em PT/EN). No rodapé, o **contador
-  OTA** confirma qual bundle está rodando de fato.
+  escolhido (o app manda o idioma, o backend responde em PT/EN). Ao abrir, os Ajustes
+  **checam se há OTA mais nova** e, se tiver, mostram um aviso **"Atualização disponível"**
+  com botão pra baixar e reabrir já atualizado. No rodapé, o **contador OTA** confirma qual
+  bundle está rodando de fato (e o estado: verificando / atualizado / desatualizado).
 
 ### Fluxo do scraper
 
