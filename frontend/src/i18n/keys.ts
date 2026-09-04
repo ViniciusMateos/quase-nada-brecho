@@ -24,6 +24,14 @@ export const PT: Dict = {
   'settings.language.sub': 'Idioma do aplicativo',
   'settings.otaUpdated': 'atualizado',
   'settings.otaEmbedded': 'build',
+  'settings.otaChecking': 'verificando…',
+  'settings.otaOutdated': 'desatualizado',
+  'settings.otaDownloading': 'baixando…',
+  'settings.otaUpdating': 'Atualizando…',
+  'settings.otaUpdateError': 'erro ao atualizar',
+  'settings.otaAvailable': 'Atualização disponível',
+  'settings.otaAvailableDesc': 'Tem uma versão nova do app esperando. Toca pra baixar e reabrir já atualizado (ou reabra o app depois que ela baixa sozinha).',
+  'settings.otaUpdateNow': 'Atualizar agora',
 
   // hub
   'hub.tagline': 'Quase Nada',
@@ -103,6 +111,14 @@ export const EN: Dict = {
   'settings.language.sub': 'App language',
   'settings.otaUpdated': 'updated',
   'settings.otaEmbedded': 'build',
+  'settings.otaChecking': 'checking…',
+  'settings.otaOutdated': 'outdated',
+  'settings.otaDownloading': 'downloading…',
+  'settings.otaUpdating': 'Updating…',
+  'settings.otaUpdateError': 'update failed',
+  'settings.otaAvailable': 'Update available',
+  'settings.otaAvailableDesc': "There's a new version of the app waiting. Tap to download and reopen already updated (or reopen the app after it downloads on its own).",
+  'settings.otaUpdateNow': 'Update now',
 
   // hub
   'hub.tagline': 'Quase Nada',
