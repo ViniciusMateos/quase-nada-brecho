@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.7.0] — 2026-09-04
+
+### Adicionado
+- feat: **cartão de status da sessão do Instagram** na tela Sincronizar — mostra a **@conta** conectada e se a sessão está viva (verde "pode rodar" / vermelho "reconecte"), com checagem ao vivo no IG por **requisição HTTP** (~2s, sem abrir navegador) em vez do Chromium (~30s). O connect passa a guardar o **@usuário** (só o rótulo, nunca a senha) pra mostrar de qual conta é a sessão.
+- feat: **"i" de ajuda nas métricas** do Dashboard e do Calendário — um ícone clicável do lado dos termos menos óbvios (margem, ROI, taxa de venda, CMV, ticket médio…) abre um pop-up curto explicando o termo (o que é, a fórmula, um exemplo); fecha no botão ou tocando fora.
+- feat: **aviso de atualização OTA na tela de Ajustes** — ao abrir, checa se há OTA mais nova e mostra um card "Atualização disponível" com botão pra baixar e reabrir já atualizado; o rodapé ganha o estado da versão (verificando / atualizado / desatualizado / baixando).
+
+### Modificado
+- update: **splash escuro** (fundo #0F0F0F). Muda o nativo — só aparece num **build** novo, não vai por OTA.
+
+### Documentação
+- docs: README descreve o cartão de status da conta, o "i" das métricas e o aviso de OTA.
+
+### Notas
+- Frontend por **OTA #33** (`runtimeVersion` segue `1.0.0`); backend/worker por `scp`.
+
 ## [1.6.1] — 2026-08-28
 
 ### Corrigido
