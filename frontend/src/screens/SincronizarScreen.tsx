@@ -95,7 +95,10 @@ export function SincronizarScreen() {
 
   // conta a mostrar + pílula de status da sessão
   const conta = igSt?.usuario ?? contaLocal;
-  const pill = verificando
+  // "pendente" = está verificando OU vai verificar já (conectado, ainda sem resultado, sem
+  // raspagem travando) → mostra "verificando…" direto, sem flashar "conectado (não verificado)".
+  const pendente = verificando || (!!igSt?.conectado && check === 'idle' && !raspando);
+  const pill = pendente
     ? { txt: t('sync.ig.verifying'), cor: colors.textoFraco, pulsa: true }
     : check === 'ok' ? { txt: t('sync.ig.ok'), cor: colors.ok, pulsa: false }
     : check === 'sem_sessao' ? { txt: t('sync.ig.dead'), cor: colors.alerta, pulsa: false }
