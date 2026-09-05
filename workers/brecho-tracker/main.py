@@ -59,15 +59,21 @@ def _reinjetar_sessao(ig):
 def modo_importar_cookies(path):
     cookies = carregar_cookies(path)
     log.info("Importando %d cookies de %s…", len(cookies), path)
-    with IG() as ig:
-        if ig.importar_cookies(cookies):
+    # Valida por HTTP (~3s) em vez de abrir o navegador (~40s) — o check HTTP e o navegador
+    # concordam. Uma sessão RECÉM-criada às vezes leva alguns segundos pro IG aceitar vinda de
+    # outro IP (o app loga no celular, o worker usa pelo proxy), então tenta algumas vezes.
+    for i in range(4):
+        if sessao_valida_http(cookies) is True:
             log.info("Sessão logada! Rode `python main.py --dry-run`.")
-        else:
-            # não confirmou nem depois do retry: reporta "sem sessão" (exit 3) em vez de fingir
-            # que conectou — o run_manager traduz pro status sem_sessao e o app pede pra reconectar.
-            log.warning("Importei os cookies mas não confirmei a sessão (o Instagram não validou "
-                        "o login). Reconecte o Instagram no app.")
-            sys.exit(3)
+            return
+        if i < 3:
+            log.info("Sessão ainda não confirmou (%d/4) — o IG pode estar validando; espero 6s.", i + 1)
+            time.sleep(6)
+    # não confirmou nem depois das tentativas: reporta "sem sessão" (exit 3) em vez de fingir
+    # que conectou — o run_manager traduz pro status sem_sessao e o app pede pra reconectar.
+    log.warning("Importei os cookies mas o Instagram não confirmou o login (a sessão pode ter "
+                "caído logo após o login). Reconecte o Instagram no app.")
+    sys.exit(3)
 
 
 def raspar(ig, boundary):
