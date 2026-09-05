@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7.1] — 2026-09-05
+
+### Modificado
+- perf: **conectar o Instagram ficou ~7x mais rápido** — a validação da sessão no reconectar passou a usar uma **requisição HTTP** (~3s, com algumas tentativas) em vez de abrir um navegador inteiro (~40s). Connect caiu de ~40-55s pra ~6s; o check HTTP e o navegador concordam no veredito.
+- update: o **cartão de status da sessão** (tela Sincronizar) vai direto pra "verificando…" em vez de piscar um "conectado (não verificado)" antes de checar — fim do "tem sessão / não tem".
+
+### Notas
+- Worker por `scp`; frontend por **OTA #43** (`runtimeVersion` segue `1.0.0`).
+
 ## [1.7.0] — 2026-09-04
 
 ### Adicionado
