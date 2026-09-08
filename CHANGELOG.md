@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.2] — 2026-09-08
+
+### Corrigido
+- fix: **editor da peça não briga mais com o teclado** — arrastar pra rolar mantém o teclado (só o toque de verdade fecha) e, ao focar qualquer campo, o editor sobe pra deixá-lo acima do teclado (o campo de legenda, o mais embaixo, rola até o fim). O rodapé Salvar/Excluir já ficava acima do teclado.
+- fix: **adicionar peças a um drop não lista mais peça de outro drop** — o filtro só excluía as peças do próprio drop, então peça já em outro drop (mesmo agendado) aparecia e podia ser "roubada"; agora só lista peça sem drop nenhum.
+
+### Adicionado
+- feat: **contador do filtro na aba de Peças** — embaixo dos chips, mostra quantas peças o filtro/busca/categoria atual deixou na lista.
+- feat: na tela de **adicionar peças ao drop**, mostra o total de **peças disponíveis (sem drop)**.
+
+### Notas
+- Frontend por **OTA #47** (`runtimeVersion` segue `1.0.0`).
+
 ## [1.7.1] — 2026-09-05
 
 ### Modificado
