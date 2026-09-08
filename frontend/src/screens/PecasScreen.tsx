@@ -276,6 +276,11 @@ export function PecasScreen() {
         </ChipBtn>
       </View>
 
+      {/* contagem do que o filtro/busca/categoria atuais deixaram na lista */}
+      <Text style={styles.contagem}>
+        {filtradas.length === 1 ? t('pecas.countOne') : t('pecas.countN', { n: filtradas.length })}
+      </Text>
+
       <FlatList
         key={tick}
         data={filtradas}
@@ -429,6 +434,7 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   chipOn: { backgroundColor: colors.marca, borderColor: colors.marca },
   chipTxt: { color: colors.texto, fontSize: 12 },
   chipTxtOn: { color: '#FFFFFF', fontWeight: '700' },
+  contagem: { color: colors.textoFraco, fontSize: 12, fontWeight: '600', paddingHorizontal: 14, paddingBottom: 4 },
   chipOrdem: { flexDirection: 'row', alignItems: 'center', gap: 4, borderColor: colors.marca, marginLeft: 'auto' },
   chipDrop: { flexDirection: 'row', alignItems: 'center', gap: 4, borderColor: colors.marca, maxWidth: 150 },
   dropFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 32 },
