@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Animated, Linking, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Linking, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -25,6 +25,10 @@ const hojeISO = () => {
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+// Ao focar QUALQUER campo, rola o editor pra deixar o campo acima do teclado (a sheet já sobe
+// o rodapé Salvar/Excluir). Fornecido pelo EditorPeca e consumido pelo <Campo> e pelos inputs.
+const RevelarCtx = createContext<(target?: number | null) => void>(() => {});
 
 const num = (t: string) => {
   const n = parseFloat((t || '').replace(',', '.'));
@@ -156,6 +160,25 @@ export function EditorPeca({
   const [base, setBase] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [mostrarMedida, setMostrarMedida] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  // rola o editor pra revelar o campo focado acima do teclado (mede a posição do input dentro
+  // do conteúdo e leva ele pra ~90px do topo). Espera o teclado/sheet assentarem antes de medir.
+  const revelarCampo = useCallback((target?: number | null) => {
+    const sv = scrollRef.current;
+    if (!sv || target == null) return;
+    const inner = sv.getInnerViewNode?.();
+    if (inner == null) return;
+    setTimeout(() => {
+      try {
+        UIManager.measureLayout(
+          target as number, inner,
+          () => {},
+          (_x: number, y: number) => sv.scrollTo({ y: Math.max(0, y - 90), animated: true }),
+        );
+      } catch { /* noop */ }
+    }, 140);
+  }, []);
 
   useEffect(() => { baseUrl().then(setBase); }, []);
   useEffect(() => {
@@ -261,8 +284,11 @@ export function EditorPeca({
           <Ionicons name="close" size={24} color={colors.textoFraco} />
         </TouchableOpacity>
       </View>
+      {/* keyboardDismissMode="none": ARRASTAR mantém o teclado (pra rolar até o campo de
+          descrição lá embaixo); o teclado só fecha no TOQUE de verdade (persistTaps handled). */}
       {form && (
-        <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+        <RevelarCtx.Provider value={revelarCampo}>
+        <ScrollView ref={scrollRef} style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
           showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
           <TouchableOpacity style={styles.fotoBox} onPress={pedirFoto} activeOpacity={0.85}>
             {previa ? (
@@ -315,6 +341,7 @@ export function EditorPeca({
                     setForm({ ...form, condicao: d ? `${d}/10` : '' });
                   }}
                   keyboardType="numeric" maxLength={2} placeholder="9" placeholderTextColor={colors.textoFraco}
+                  onFocus={(e) => revelarCampo(e.nativeEvent.target)}
                   style={[styles.input, { flex: 1 }]} />
                 <Text style={styles.condSufixo}>/10</Text>
               </View>
@@ -353,10 +380,11 @@ export function EditorPeca({
                   </ScrollView>
                   <View style={styles.medidaValorRow}>
                     <TextInput value={m.tipo} placeholder={t('editor.measureNamePh')} placeholderTextColor={colors.textoFraco}
-                      style={[styles.medidaInput, { flex: 1 }]}
+                      style={[styles.medidaInput, { flex: 1 }]} onFocus={(e) => revelarCampo(e.nativeEvent.target)}
                       onChangeText={(v) => { const ms = [...form.medidas]; ms[i] = { ...ms[i], tipo: v }; setForm({ ...form, medidas: ms }); }} />
                     <TextInput value={m.valor} keyboardType="numeric" placeholder={t('editor.cm')}
                       placeholderTextColor={colors.textoFraco} style={[styles.medidaInput, { flex: 0, width: 60, textAlign: 'center' }]}
+                      onFocus={(e) => revelarCampo(e.nativeEvent.target)}
                       onChangeText={(v) => { const ms = [...form.medidas]; ms[i] = { ...ms[i], valor: v.replace(/[^\d.,]/g, '') }; setForm({ ...form, medidas: ms }); }} />
                     <Text style={styles.cmTxt}>{t('editor.cm')}</Text>
                     <TouchableOpacity hitSlop={8}
@@ -488,6 +516,7 @@ export function EditorPeca({
                   <View style={styles.consigInputWrap}>
                     <TextInput value={form.consigPct} keyboardType="numeric" maxLength={3}
                       placeholder="40" placeholderTextColor={colors.textoFraco} style={[styles.input, { flex: 1 }]}
+                      onFocus={(e) => revelarCampo(e.nativeEvent.target)}
                       onChangeText={(v) => setForm({ ...form, consigPct: v.replace(/[^\d]/g, '').slice(0, 3) })} />
                     <Text style={styles.condSufixo}>%</Text>
                   </View>
@@ -499,6 +528,7 @@ export function EditorPeca({
                     <Text style={styles.condSufixo}>R$</Text>
                     <TextInput value={form.consigValor} keyboardType="numeric"
                       placeholder="5" placeholderTextColor={colors.textoFraco} style={[styles.input, { flex: 1 }]}
+                      onFocus={(e) => revelarCampo(e.nativeEvent.target)}
                       onChangeText={(v) => setForm({ ...form, consigValor: v.replace(/[^\d.,]/g, '') })} />
                   </View>
                 </>
@@ -538,6 +568,7 @@ export function EditorPeca({
                       onChangeText={(v) => setForm({ ...form, template: v })}
                       multiline textAlignVertical="top"
                       placeholder={t('editor.templatePh')} placeholderTextColor={colors.textoFraco}
+                      onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 240)}
                       style={styles.templateInput} />
                     {custom && (
                       <TouchableOpacity onPress={() => setForm({ ...form, template: '' })} hitSlop={6}>
@@ -557,6 +588,7 @@ export function EditorPeca({
               onPress={() => Linking.openURL(`https://www.instagram.com/p/${form.code}/`)} />
           )}
         </ScrollView>
+        </RevelarCtx.Provider>
       )}
     </BottomSheet>
   );
@@ -571,12 +603,14 @@ function Campo({ label, valor, onChange, numerico, multiline, placeholder, style
   { label: string; valor: string; onChange: (v: string) => void; numerico?: boolean; multiline?: boolean; placeholder?: string; style?: object }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const revelar = useContext(RevelarCtx);
   return (
     <View style={style}>
       <Text style={styles.campoLabel}>{label}</Text>
       <TextInput value={valor} onChangeText={onChange} keyboardType={numerico ? 'numeric' : 'default'}
         multiline={multiline} textAlignVertical={multiline ? 'top' : 'center'}
         placeholder={placeholder} placeholderTextColor={colors.textoFraco}
+        onFocus={(e) => revelar(e.nativeEvent.target)}
         style={[styles.input, multiline && styles.inputMultiline]} />
     </View>
   );
@@ -678,7 +712,7 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   copiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.marca },
   copiarTxt: { color: colors.marca, fontSize: 12, fontWeight: '700' },
   templateTxt: { color: colors.texto, fontSize: 13, lineHeight: 20, fontFamily: 'monospace' },
-  templateInput: { color: colors.texto, fontSize: 13, lineHeight: 20, fontFamily: 'monospace', backgroundColor: colors.bg, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 10, minHeight: 160 },
+  templateInput: { color: colors.texto, fontSize: 13, lineHeight: 20, fontFamily: 'monospace', backgroundColor: colors.bg, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 10, minHeight: 120, maxHeight: 240 },
   templateReset: { color: colors.marca, fontSize: 12, fontWeight: '700', marginTop: 8, textAlign: 'right' },
   tipoChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   tipoChipOn: { backgroundColor: colors.marca, borderColor: colors.marca },
