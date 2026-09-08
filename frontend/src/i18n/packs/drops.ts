@@ -41,6 +41,7 @@ export const pt: Record<string, string> = {
   'drops.addN': 'Adicionar {n}',
   'drops.selectPieces': 'Selecione peças',
   'drops.removeFromDrop': 'Remover do drop',
+  'drops.availableCount': '{n} peças disponíveis (sem drop)',
 };
 export const en: Record<string, string> = {
   'drops.noDate': 'no date',
@@ -84,4 +85,5 @@ export const en: Record<string, string> = {
   'drops.addN': 'Add {n}',
   'drops.selectPieces': 'Select items',
   'drops.removeFromDrop': 'Remove from drop',
+  'drops.availableCount': '{n} items available (no drop)',
 };

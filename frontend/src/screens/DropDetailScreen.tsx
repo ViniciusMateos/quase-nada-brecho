@@ -119,9 +119,10 @@ export function DropDetailScreen() {
 
   if (!drop) return <TelaCarregando />;
 
-  // só peças do catálogo manual, DISPONÍVEIS (não vendidas), fora deste drop — as do
-  // scraper já têm o drop delas, e vendida não entra em drop novo
-  const foraDoDrop = todas.filter((p) => p.drop_id !== params.dropId && p.origem === 'manual' && !p.vendida);
+  // só peças do catálogo manual, DISPONÍVEIS (não vendidas) e SEM DROP nenhum: peça que já
+  // está em outro drop (qualquer status, mesmo agendado) NÃO aparece aqui — senão dá pra
+  // "roubar" peça de um drop pro outro sem querer.
+  const foraDoDrop = todas.filter((p) => p.drop_id == null && p.origem === 'manual' && !p.vendida);
   const totalVenda = drop.pecas.reduce((s, p) => s + p.venda, 0);
 
   return (
@@ -249,6 +250,9 @@ export function DropDetailScreen() {
             );
           }}
         />
+        {foraDoDrop.length > 0 && (
+          <Text style={styles.dispCount}>{t('drops.availableCount', { n: foraDoDrop.length })}</Text>
+        )}
         <View style={{ height: 12 }} />
         <Botao title={sel.size ? t('drops.addN', { n: sel.size }) : t('drops.selectPieces')} onPress={confirmarAdd} disabled={!sel.size} loading={adicionando} />
       </BottomSheet>
@@ -299,4 +303,5 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   modalTitulo: { color: colors.texto, fontSize: 18, fontWeight: '800' },
   pick: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   pickThumb: { width: 40, height: 50, borderRadius: 8, backgroundColor: colors.card2 },
+  dispCount: { color: colors.textoFraco, fontSize: 12, textAlign: 'center', marginTop: 10 },
 });
