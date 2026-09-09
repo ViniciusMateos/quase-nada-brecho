@@ -463,8 +463,11 @@ class IG:
             # do IG que não engatou. Aí a gente re-arma ele (sobe um tico e desce forte) e
             # insiste, em vez de declarar sucesso com meia raspagem.
             alvo = total_alvo or 0
-            meta = int(alvo * 0.90)     # chegou aqui = feed inteiro (folga p/ reels/fixados)
-            minimo = int(alvo * 0.50)   # terminou abaixo disso = claramente incompleto
+            # QUER TUDO: desce até o FIM REAL do feed (todos os posts), não para em 90%.
+            # O total do perfil (alvo) guia o re-arme (enquanto não chegou nele, insiste), mas
+            # quem manda parar é ou ter capturado o feed inteiro (n >= alvo) ou o feed travar
+            # de vez mesmo re-armando (fim real — perfil pode contar 1 fixado/quirk a mais).
+            minimo = int(alvo * 0.50)   # terminou abaixo disso = claramente incompleto (loader não engatou)
             estavel = ult = 0
             for i in range(max_scrolls):
                 self.page.mouse.wheel(0, random.randint(3000, 6000))
@@ -478,9 +481,9 @@ class IG:
                     estavel = 0
                 else:
                     estavel += 1                   # scroll sem novidade (carregando/fim)
-                    # longe do total conhecido → o carregador não engatou: re-arma ele
-                    # (sobe um pouco e desce forte) e dá mais tempo, em vez de contar como fim.
-                    if alvo and n < meta:
+                    # ainda não chegamos ao total do perfil → o carregador pode não ter engatado:
+                    # re-arma ele (sobe um pouco e desce forte) e insiste, em vez de contar como fim.
+                    if alvo and n < alvo:
                         self.page.mouse.wheel(0, -1500)
                         self.page.wait_for_timeout(500)
                         self.page.mouse.wheel(0, 9000)
@@ -492,15 +495,16 @@ class IG:
                                 print(f"[progress] {min(n, total_alvo)} {total_alvo} descendo o feed", flush=True)
                             estavel = 0
                 ult = n
-                if alvo and n >= meta:
-                    log.info("Capturou %d de ~%d posts — feed completo.", n, alvo)
+                if alvo and n >= alvo:
+                    log.info("Capturou %d de ~%d posts — feed inteiro.", n, alvo)
                     break
-                if not alvo and estavel >= estavel_max:
-                    # sem total conhecido não dá pra julgar completude → cai no heurístico
-                    log.info("Feed estabilizou em %d posts — fim do perfil.", n)
-                    break
-                if alvo and estavel >= max(estavel_max, 12):
-                    log.warning("Feed empacou em %d de ~%d posts mesmo re-armando o carregador.", n, alvo)
+                if estavel >= max(estavel_max, 12):
+                    # travou de vez mesmo re-armando = fim real do feed (com alvo, geralmente
+                    # 1-2 abaixo por post fixado/contagem do perfil; sem alvo, é o heurístico puro).
+                    if alvo:
+                        log.info("Feed terminou em %d de ~%d posts (não desceu mais).", n, alvo)
+                    else:
+                        log.info("Feed estabilizou em %d posts — fim do perfil.", n)
                     break
         finally:
             try:
