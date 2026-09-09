@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.4] — 2026-09-09
+
+### Corrigido
+- fix: na tela de **adicionar peças a um drop**, peça **vendida sem drop** agora também aparece na lista. O filtro escondia as vendidas (`!p.vendida`), mas sem drop é sem drop — um drop pode conter peça já vendida (registro retroativo). Peça que já está em outro drop continua fora.
+
+### Notas
+- Frontend por **OTA #48** (`runtimeVersion` segue `1.0.0`).
+
 ## [1.7.3] — 2026-09-09
 
 ### Corrigido
