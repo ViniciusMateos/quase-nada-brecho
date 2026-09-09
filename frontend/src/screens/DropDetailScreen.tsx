@@ -119,10 +119,10 @@ export function DropDetailScreen() {
 
   if (!drop) return <TelaCarregando />;
 
-  // só peças do catálogo manual, DISPONÍVEIS (não vendidas) e SEM DROP nenhum: peça que já
-  // está em outro drop (qualquer status, mesmo agendado) NÃO aparece aqui — senão dá pra
-  // "roubar" peça de um drop pro outro sem querer.
-  const foraDoDrop = todas.filter((p) => p.drop_id == null && p.origem === 'manual' && !p.vendida);
+  // só peças MANUAIS SEM DROP nenhum: peça já em outro drop (qualquer status, mesmo agendado)
+  // NÃO aparece — senão "rouba" de outro drop. Vendida ENTRA: sem drop é sem drop, e um drop
+  // pode conter peça já vendida (ex.: registrar retroativo uma que vendeu antes de organizar).
+  const foraDoDrop = todas.filter((p) => p.drop_id == null && p.origem === 'manual');
   const totalVenda = drop.pecas.reduce((s, p) => s + p.venda, 0);
 
   return (
