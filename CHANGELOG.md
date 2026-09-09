@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.3] — 2026-09-09
+
+### Corrigido
+- fix: **o scraper agora desce o feed inteiro** em vez de parar em 90%. O corte de 90% assumia que os últimos 10% eram reels/fixados; em perfis sem reels isso deixava posts reais de fora (parava em 348 de 385). Agora vai até o fim de verdade (re-arma o carregador enquanto não chega no total do perfil; só para ao pegar tudo ou quando o feed trava de vez). Confirmado 385/385. A trava de raspagem incompleta (< 50%) continua.
+
+### Notas
+- Mudança só no worker (deploy por `scp`); sem OTA. A run fica um pouco mais longa por descer o feed completo.
+
 ## [1.7.2] — 2026-09-08
 
 ### Corrigido
