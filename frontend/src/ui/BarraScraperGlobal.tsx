@@ -85,12 +85,22 @@ export function BarraScraperGlobal({ onAbrir }: { onAbrir?: (runId: string) => v
     return () => clearTimeout(t);
   }, [ativo]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // recolhe em bolha quando o usuário toca/scrolla a tela
+  // recolhe em bolha quando o usuário navega (onStateChange no RootNavigator emite isto).
+  // Antes isto era disparado por um capture de toque que embrulhava o navigator e quebrava
+  // o botão de voltar do header nativo — ver comentário no RootNavigator.
   useEffect(() => {
     return interacaoBus.ouvir(() => {
       if (!ativo || modo !== 'barra' || Date.now() < grace.current) return;
       recolher();
     });
+  }, [ativo, modo]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // e também se recolhe sozinha depois de alguns segundos, pra sair da frente sem depender
+  // de detectar toque na tela (o que exigia o capture problemático).
+  useEffect(() => {
+    if (!ativo || modo !== 'barra') return;
+    const t = setTimeout(() => recolher(), 4000);
+    return () => clearTimeout(t);
   }, [ativo, modo]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   function recolher() {
@@ -154,7 +164,7 @@ export function BarraScraperGlobal({ onAbrir }: { onAbrir?: (runId: string) => v
       // fling: a velocidade decide o lado; senão, o lado mais próximo
       const paraDir = g.vx > 0.3 ? true : g.vx < -0.3 ? false : cx > w.width / 2;
       const destX = paraDir ? w.width - BOLHA - MARGEM : MARGEM;
-      const minY = ins.top + 6;
+      const minY = ins.top + 54;   // nunca deixa a bolha estacionar em cima do header/botão de voltar
       const maxY = w.height - BOLHA - ins.bottom - 6;
       const destY = Math.max(minY, Math.min(maxY, posRef.current.y));  // MANTÉM o Y arrastado
       posRef.current = { x: destX, y: destY };

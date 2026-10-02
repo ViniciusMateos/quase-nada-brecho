@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
-import { View } from 'react-native';
 import { DarkTheme, DefaultTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '@/theme-context';
 import { useI18n } from '@/i18n';
 import { BarraScraperGlobal } from '@/ui/BarraScraperGlobal';
+import { BotaoVoltar } from '@/ui/BotaoVoltar';
 import { interacaoBus } from '@/ui/interacaoBus';
 import { HubScreen } from '@/screens/HubScreen';
 import { PecasScreen } from '@/screens/PecasScreen';
@@ -58,17 +58,24 @@ export function RootNavigator() {
   }, [colors, isDark]);
 
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme}>
-      {/* captura (sem roubar) qualquer toque/scroll nas telas → avisa a barra flutuante
-          pra ela se recolher em bolha. Retornar false = não vira responder. */}
-      <View
-        style={{ flex: 1 }}
-        onStartShouldSetResponderCapture={() => { interacaoBus.emitir(); return false; }}>
+    // NÃO embrulhar o Stack.Navigator num <View> com onStartShouldSetResponderCapture:
+    // embrulhar o native-stack + captura de responder bagunçava a área de toque do botão
+    // de voltar do header NATIVO (ele parava de funcionar depois de mexer/scrollar na tela,
+    // só o gesto de arrastar da borda voltava). A barra flutuante agora se recolhe sozinha
+    // (timer) e quando você navega (onStateChange), sem precisar capturar toque nenhum.
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onStateChange={() => interacaoBus.emitir()}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.card },
           headerTintColor: colors.texto,
           contentStyle: { backgroundColor: colors.bg },
+          // Botão de voltar em JS (chama goBack()) no lugar do nativo, que trava no iOS 26
+          // — ver BotaoVoltar. Só aparece quando dá pra voltar; o gesto de arrastar segue
+          // funcionando normal.
+          headerLeft: (props) => (props.canGoBack ? <BotaoVoltar {...props} /> : undefined),
         }}>
         <Stack.Screen name="Hub" component={HubScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Pecas" component={PecasScreen} options={{ title: t('nav.pecas') }} />
@@ -87,7 +94,6 @@ export function RootNavigator() {
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen} options={{ title: t('nav.instagram') }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
       </Stack.Navigator>
-      </View>
       <BarraScraperGlobal onAbrir={(runId) => {
         if (navigationRef.isReady()) navigationRef.navigate('Run', { runId, nome: 'Raspando o brechó' });
       }} />
