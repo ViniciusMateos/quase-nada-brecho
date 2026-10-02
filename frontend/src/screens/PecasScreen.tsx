@@ -12,7 +12,8 @@ import { api, DropResumo, Peca } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
 import { type Cores } from '@/theme';
 import { useTheme } from '@/theme-context';
-import { Aparece, Pressavel } from '@/ui/components';
+import { Aparece, Botao, Pressavel } from '@/ui/components';
+import { BottomSheet } from '@/ui/BottomSheet';
 import { EditorPeca } from '@/ui/EditorPeca';
 import { MenuContexto } from '@/ui/MenuContexto';
 import { LoadingDog, TelaCarregando } from '@/ui/LoadingDog';
@@ -24,7 +25,12 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type Filtro = 'todas' | 'disponiveis' | 'vendidas' | 'sem-drop';
+type FStatus = 'qualquer' | 'disponivel' | 'vendida';
+type FDrop = 'qualquer' | 'sem' | 'em' | 'publicado' | 'agendado' | 'rascunho';
+type FConsig = 'qualquer' | 'sim' | 'nao';
+type FOrigem = 'qualquer' | 'manual' | 'scraper';
+type FiltrosAv = { status: FStatus; drop: FDrop; consignado: FConsig; origem: FOrigem };
+const FILTROS_PADRAO: FiltrosAv = { status: 'qualquer', drop: 'qualquer', consignado: 'qualquer', origem: 'qualquer' };
 
 function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
@@ -78,7 +84,8 @@ export function PecasScreen() {
   const [pecas, setPecas] = useState<Peca[] | null>(null);
   const [drops, setDrops] = useState<DropResumo[]>([]);
   const [base, setBase] = useState('');
-  const [filtro, setFiltro] = useState<Filtro>('todas');
+  const [filtros, setFiltros] = useState<FiltrosAv>(FILTROS_PADRAO);
+  const [avancadoAberto, setAvancadoAberto] = useState(false);
   const [ordem, setOrdem] = useState<'recente' | 'antiga'>('recente');
   // categoria já vem filtrada quando chega do Dashboard (toque numa categoria)
   const [categoria, setCategoria] = useState<string | null>(route.params?.categoria ?? null);
@@ -195,11 +202,26 @@ export function PecasScreen() {
   const filtradas = useMemo(() => {
     const b = busca.trim().toLowerCase();
     const arr = (pecas ?? []).filter((p) => {
-      if (filtro === 'vendidas' && !p.vendida) return false;
-      if (filtro === 'disponiveis' && p.vendida) return false;
-      // "sem drop" = fora de QUALQUER drop: nem manual (drop_id) nem histórico (pela data do
-      // post). Peça raspada tem drop pelo postado_em, então checar só drop_id deixava tudo vazar.
-      if (filtro === 'sem-drop' && dropDaPeca(p.drop_id, p.postado_em)) return false;
+      // status
+      if (filtros.status === 'disponivel' && p.vendida) return false;
+      if (filtros.status === 'vendida' && !p.vendida) return false;
+      // estado do drop. "sem drop" = fora de QUALQUER drop (manual por drop_id, histórico pela
+      // data do post). Raspado tem drop pelo postado_em, por isso checo pelo dropDaPeca.
+      if (filtros.drop !== 'qualquer') {
+        const d = dropDaPeca(p.drop_id, p.postado_em);
+        if (filtros.drop === 'sem' && d) return false;
+        if (filtros.drop === 'em' && !d) return false;
+        // histórico (raspado) = post real já publicado; drop manual conta pelo status
+        if (filtros.drop === 'publicado' && !(d && (d.tipo === 'historico' || d.status === 'publicado'))) return false;
+        if (filtros.drop === 'agendado' && !(d && d.tipo === 'manual' && d.status === 'agendado')) return false;
+        if (filtros.drop === 'rascunho' && !(d && d.tipo === 'manual' && d.status === 'rascunho')) return false;
+      }
+      // consignado
+      if (filtros.consignado === 'sim' && !p.consignado) return false;
+      if (filtros.consignado === 'nao' && p.consignado) return false;
+      // origem (criada no app x raspada do Insta)
+      if (filtros.origem === 'manual' && p.origem !== 'manual') return false;
+      if (filtros.origem === 'scraper' && p.origem === 'manual') return false;
       if (categoria && (p.item ?? '').trim() !== categoria) return false;
       // busca tolerante (sem acento, ordem livre, typo): nome + categoria (PT e traduzida)
       if (b && !casaBusca(`${p.nome ?? ''} ${p.item ?? ''} ${traduzCategoria(p.item ?? '', lang)}`, b)) return false;
@@ -215,7 +237,10 @@ export function PecasScreen() {
     });
     if (ordem === 'recente') arr.reverse();
     return arr;
-  }, [pecas, drops, filtro, busca, ordem, categoria, lang]);
+  }, [pecas, drops, filtros, busca, ordem, categoria, lang]);
+
+  // quantos filtros avançados estão ativos (pro selo no botão "Filtros")
+  const nAvancados = (filtros.drop !== 'qualquer' ? 1 : 0) + (filtros.consignado !== 'qualquer' ? 1 : 0) + (filtros.origem !== 'qualquer' ? 1 : 0);
 
   if (!pecas) return <TelaCarregando />;
 
@@ -253,11 +278,10 @@ export function PecasScreen() {
         </View>
       )}
       <View style={styles.chips}>
-        {(['todas', 'disponiveis', 'vendidas', 'sem-drop'] as Filtro[]).map((f) => (
-          <ChipBtn key={f} on={filtro === f} onPress={() => { setFiltro(f); bump(); }}>
-            <Text style={[styles.chipTxt, filtro === f && styles.chipTxtOn]}>
-              {f === 'todas' ? t('pecas.all', { n: pecas.length }) : f === 'disponiveis' ? t('pecas.available')
-                : f === 'vendidas' ? t('pecas.sold') : t('pecas.noDrop')}
+        {(['qualquer', 'disponivel', 'vendida'] as FStatus[]).map((s) => (
+          <ChipBtn key={s} on={filtros.status === s} onPress={() => { setFiltros((f) => ({ ...f, status: s })); bump(); }}>
+            <Text style={[styles.chipTxt, filtros.status === s && styles.chipTxtOn]}>
+              {s === 'qualquer' ? t('pecas.all', { n: pecas.length }) : s === 'disponivel' ? t('pecas.available') : t('pecas.sold')}
             </Text>
           </ChipBtn>
         ))}
@@ -270,6 +294,11 @@ export function PecasScreen() {
             <Ionicons name="chevron-down" size={12} color={categoria ? '#FFFFFF' : colors.textoFraco} />
           </ChipBtn>
         )}
+        <ChipBtn on={nAvancados > 0} onPress={() => setAvancadoAberto(true)} extra={styles.chipDrop}>
+          <Ionicons name="options-outline" size={13} color={nAvancados > 0 ? '#FFFFFF' : colors.marca} />
+          <Text style={[styles.chipTxt, nAvancados > 0 && styles.chipTxtOn]}>{t('pecas.advanced')}</Text>
+          {nAvancados > 0 && <View style={styles.badge}><Text style={styles.badgeTxt}>{nAvancados}</Text></View>}
+        </ChipBtn>
         <ChipBtn onPress={() => { setOrdem((o) => (o === 'recente' ? 'antiga' : 'recente')); bump(); }} extra={styles.chipOrdem}>
           <Ionicons name="swap-vertical" size={13} color={colors.marca} />
           <Text style={styles.chipTxt}>{ordem === 'recente' ? t('pecas.recent') : t('pecas.old')}</Text>
@@ -402,6 +431,58 @@ export function PecasScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── filtro avançado: dimensões combináveis (status + drop + consignado + origem) ── */}
+      <BottomSheet visible={avancadoAberto} onClose={() => setAvancadoAberto(false)}
+        footer={
+          <>
+            <Text style={styles.sheetCount}>
+              {filtradas.length === 1 ? t('pecas.countOne') : t('pecas.countN', { n: filtradas.length })}
+            </Text>
+            <Botao title={t('pecas.clearFilters')} cor={colors.card2} txtCor={colors.texto}
+              onPress={() => { setFiltros(FILTROS_PADRAO); setCategoria(null); bump(); }} />
+          </>
+        }>
+        <View style={styles.sheetTopo}>
+          <Text style={styles.sheetTitulo}>{t('pecas.advTitle')}</Text>
+          <TouchableOpacity onPress={() => setAvancadoAberto(false)} hitSlop={10}>
+            <Ionicons name="close" size={24} color={colors.textoFraco} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={{ maxHeight: 440 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <Seg label={t('pecas.fStatus')} valor={filtros.status} styles={styles}
+            onSel={(v) => { setFiltros((f) => ({ ...f, status: v as FStatus })); bump(); }}
+            opcoes={[{ v: 'qualquer', txt: t('pecas.any') }, { v: 'disponivel', txt: t('pecas.available') }, { v: 'vendida', txt: t('pecas.sold') }]} />
+          <Seg label={t('pecas.fDrop')} valor={filtros.drop} styles={styles}
+            onSel={(v) => { setFiltros((f) => ({ ...f, drop: v as FDrop })); bump(); }}
+            opcoes={[{ v: 'qualquer', txt: t('pecas.any') }, { v: 'sem', txt: t('pecas.dropNone') }, { v: 'em', txt: t('pecas.dropIn') }, { v: 'publicado', txt: t('pecas.dropPublished') }, { v: 'agendado', txt: t('pecas.dropScheduled') }, { v: 'rascunho', txt: t('pecas.dropDraft') }]} />
+          <Seg label={t('pecas.fConsig')} valor={filtros.consignado} styles={styles}
+            onSel={(v) => { setFiltros((f) => ({ ...f, consignado: v as FConsig })); bump(); }}
+            opcoes={[{ v: 'qualquer', txt: t('pecas.any') }, { v: 'sim', txt: t('pecas.yes') }, { v: 'nao', txt: t('pecas.no') }]} />
+          <Seg label={t('pecas.fOrigem')} valor={filtros.origem} styles={styles}
+            onSel={(v) => { setFiltros((f) => ({ ...f, origem: v as FOrigem })); bump(); }}
+            opcoes={[{ v: 'qualquer', txt: t('pecas.any') }, { v: 'manual', txt: t('pecas.origManual') }, { v: 'scraper', txt: t('pecas.origScraper') }]} />
+        </ScrollView>
+      </BottomSheet>
+    </View>
+  );
+}
+
+// bloco de uma dimensão do filtro avançado: rótulo + pílulas (uma opção ativa por vez)
+function Seg({ label, valor, opcoes, onSel, styles }: {
+  label: string; valor: string; opcoes: { v: string; txt: string }[];
+  onSel: (v: string) => void; styles: ReturnType<typeof makeStyles>;
+}) {
+  return (
+    <View style={styles.segBloco}>
+      <Text style={styles.segLabel}>{label}</Text>
+      <View style={styles.segRow}>
+        {opcoes.map((o) => (
+          <TouchableOpacity key={o.v} style={[styles.segChip, valor === o.v && styles.segChipOn]} onPress={() => onSel(o.v)}>
+            <Text style={[styles.segChipTxt, valor === o.v && styles.segChipTxtOn]}>{o.txt}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
@@ -435,6 +516,18 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   chipTxt: { color: colors.texto, fontSize: 12 },
   chipTxtOn: { color: '#FFFFFF', fontWeight: '700' },
   contagem: { color: colors.textoFraco, fontSize: 12, fontWeight: '600', paddingHorizontal: 14, paddingBottom: 4 },
+  badge: { marginLeft: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  badgeTxt: { color: colors.marca, fontSize: 10, fontWeight: '800' },
+  sheetTopo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  sheetTitulo: { color: colors.texto, fontSize: 18, fontWeight: '800' },
+  sheetCount: { color: colors.textoFraco, fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  segBloco: { marginBottom: 16 },
+  segLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
+  segRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  segChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  segChipOn: { backgroundColor: colors.marca, borderColor: colors.marca },
+  segChipTxt: { color: colors.texto, fontSize: 13 },
+  segChipTxtOn: { color: '#FFFFFF', fontWeight: '700' },
   chipOrdem: { flexDirection: 'row', alignItems: 'center', gap: 4, borderColor: colors.marca, marginLeft: 'auto' },
   chipDrop: { flexDirection: 'row', alignItems: 'center', gap: 4, borderColor: colors.marca, maxWidth: 150 },
   dropFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 32 },
