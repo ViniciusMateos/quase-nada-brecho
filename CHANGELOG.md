@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.8.0] — 2026-10-02
+
+### Adicionado
+- feat: **filtro avançado de peças** — bottom sheet com filtros **combináveis**: estado do drop (sem drop / em algum drop / publicado / agendado / rascunho), **consignado** e **origem** (criada no app / raspada do Insta). Ganha badge de filtros ativos e botão "limpar filtros".
+
+### Corrigido
+- fix: **o botão de voltar do header travava no iOS 26** — bug do `react-native-screens` (disparado pela 1ª tela da stack usar `headerShown:false`) matava o back **nativo** depois de mexer/scrollar/abrir outra tela; só o gesto de arrastar da borda voltava. Trocado por um **botão em JS** que chama `goBack()` (que continua funcionando) — fix via OTA, sem rebuild. A barra flutuante do scraper passou a recolher por **timer** e ao **navegar**, em vez de capturar toque (o wrapper problemático do navigator foi removido).
+- fix: **autofill do login do Instagram** só preenche na tela de login (quando há campo de senha), **uma vez por campo vazio**, e para se você digitar/tocar — antes reescrevia até o campo de "trocar e-mail".
+
+### Documentação
+- docs: README descreve o filtro avançado de peças.
+
+### Notas
+- Frontend por **OTA #53** (`runtimeVersion` segue `1.0.0`).
+
 ## [1.7.4] — 2026-09-09
 
 ### Corrigido
