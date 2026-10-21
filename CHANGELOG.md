@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.0] — 2026-10-21
+
+### Adicionado
+- feat: no **Calendário**, troca de mês **arrastando pro lado** (além das setas) — segue o dedo e completa a transição slide/fade; scroll vertical e toques nos dias seguem normais.
+
+### Corrigido
+- fix: **a raspagem roda headed num display virtual (Xvfb)** — o Chromium **headless** estrangulava o scroll infinito do IG (pegava o 1º lote e abortava "incompleta", só pegava na 2ª/3ª vez). Com janela, mesmo virtual, o feed desce **inteiro numa run só**. O stop agora mata a **árvore inteira** de processos (xvfb-run → python → chromium → Xvfb) pra não deixar órfão comendo CPU.
+- fix: **o scraper só coleta post de verdade** (ignora as fotos-filho de carrossel). Elas têm `code` mas não `taken_at`; como cada peça é um carrossel de ~5 fotos, o contador de completude batia o total do perfil com ~1/5 dos posts reais e o scroll **parava cedo**, pulando posts antigos — e vendas neles. Voltou a descer o feed inteiro (90 → 385 peças).
+- fix: **sem notificação de progresso na raspagem** — sem Live Activity, o backend mandava um push a cada ~15% ("... 14% descendo o feed") poluindo o lock screen. Removido; o progresso aparece só na Live Activity e na tela da Run (+ notificação de conclusão no fim).
+- fix: **os logs da tela Run reconectam** quando o WebSocket cai (1006) no meio da run e **saem do "carregando" assim que conectam** (não travam mais nos ~70s de abrir o navegador).
+
+### Notas
+- Frontend por **OTA #54** (swipe do calendário) e **#55** (logs da Run); `runtimeVersion` segue `1.0.0`. Backend/worker por `scp`.
+
 ## [1.8.0] — 2026-10-02
 
 ### Adicionado
