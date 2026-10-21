@@ -403,8 +403,12 @@ class IG:
         def _colher(o):
             if isinstance(o, dict):
                 code = o.get("code")
-                # nó de post de topo: tem code + caption (carrossel-filho não tem caption própria)
-                if code and ("image_versions2" in o or "caption" in o):
+                # SÓ post de topo (tem taken_at). NÃO colher filho de carrossel: ele tem code +
+                # image_versions2 (e até caption:null), mas NÃO tem taken_at. Colher o filho
+                # inflava a contagem — cada peça é um carrossel de ~5 fotos, então o contador de
+                # completude batia o total do perfil (~418) com só ~1/5 dos posts reais e o scroll
+                # PARAVA cedo, deixando a maior parte do feed (e vendas nos posts antigos) de fora.
+                if code and ("taken_at" in o or "taken_at_timestamp" in o):
                     # o IG serve posts de OUTRAS contas junto no scroll (sugestão/tag/reels
                     # relacionados — ex.: bazar de outra loja). Só colhe o que é da PRÓPRIA
                     # conta do brechó: se o nó declara um dono diferente, descarta. Sem dono
