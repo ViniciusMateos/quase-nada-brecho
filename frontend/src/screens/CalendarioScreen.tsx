@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+import { Animated, FlatList, LayoutAnimation, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -116,6 +116,8 @@ export function CalendarioScreen() {
   // transição slide+fade ao trocar de mês (igual ao calendário do editar peça)
   const slideX = useRef(new Animated.Value(0)).current;
   const gridOp = useRef(new Animated.Value(1)).current;
+  const dragX = useRef(0);            // dx corrente do arrasto (pra continuar a saída de onde parou)
+  const larguraRef = useRef(0);       // largura da área do calendário (medida por onLayout)
 
   const carregar = useCallback(() => {
     baseUrl().then(setBase);
@@ -143,10 +145,14 @@ export function CalendarioScreen() {
   const margemMes = totalMes > 0 ? Math.round((lucroMes / totalMes) * 100) : 0;   // lucro ÷ venda
   const roiMes = gastoMes > 0 ? Math.round((lucroMes / gastoMes) * 100) : 0;       // lucro ÷ gasto
 
-  function irMes(delta: number) {
+  // troca de mês com a transição slide+fade. `fromDrag` continua a saída de onde o dedo parou
+  // (em vez de começar do 0), pra não dar salto quando vem de um arrasto.
+  function irMes(delta: number, fromDrag = false) {
     const dir = delta > 0 ? 1 : -1;
+    const atual = fromDrag ? dragX.current : 0;
+    const saida = -dir * Math.max(50, Math.abs(atual) + 44);
     Animated.parallel([
-      Animated.timing(slideX, { toValue: -dir * 40, duration: 120, useNativeDriver: true }),
+      Animated.timing(slideX, { toValue: saida, duration: 120, useNativeDriver: true }),
       Animated.timing(gridOp, { toValue: 0, duration: 120, useNativeDriver: true }),
     ]).start(() => {
       setDiaSel(null);
@@ -155,13 +161,40 @@ export function CalendarioScreen() {
         if (mes < 0) { mes = 11; ano--; } else if (mes > 11) { mes = 0; ano++; }
         return { ano, mes };
       });
-      slideX.setValue(dir * 40);
+      slideX.setValue(dir * 44);
       Animated.parallel([
         Animated.spring(slideX, { toValue: 0, useNativeDriver: true, tension: 90, friction: 11 }),
         Animated.timing(gridOp, { toValue: 1, duration: 190, useNativeDriver: true }),
       ]).start();
     });
   }
+
+  // volta o calendário pro lugar quando o arrasto não foi longe o bastante pra trocar de mês
+  const voltarPosicao = () => Animated.parallel([
+    Animated.spring(slideX, { toValue: 0, useNativeDriver: true, tension: 120, friction: 12 }),
+    Animated.timing(gridOp, { toValue: 1, duration: 150, useNativeDriver: true }),
+  ]).start();
+
+  // arrastar pro lado troca de mês (mesma animação das setas). Só pega arrasto HORIZONTAL,
+  // então o scroll vertical e os toques nos dias seguem funcionando. PanResponder + Animated
+  // (não Reanimated) — é o que funciona de verdade no aparelho neste app.
+  const pan = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
+    onPanResponderGrant: () => { dragX.current = 0; },
+    onPanResponderMove: (_, g) => {
+      dragX.current = g.dx;
+      slideX.setValue(Math.max(-110, Math.min(110, g.dx * 0.5)));   // segue o dedo (meia distância, com teto)
+      const larg = larguraRef.current || 340;
+      gridOp.setValue(1 - Math.min(Math.abs(g.dx) / (larg * 1.3), 0.35));
+    },
+    onPanResponderRelease: (_, g) => {
+      const passou = Math.abs(g.dx) > 55 || Math.abs(g.vx) > 0.3;
+      if (passou && g.dx < 0) irMes(1, true);         // arrastou pra ESQUERDA → próximo mês
+      else if (passou && g.dx > 0) irMes(-1, true);   // arrastou pra DIREITA → mês anterior
+      else voltarPosicao();
+    },
+    onPanResponderTerminate: () => voltarPosicao(),
+  })).current;
 
   if (!pecas) return <TelaCarregando />;
 
@@ -187,6 +220,9 @@ export function CalendarioScreen() {
         {/* tocar em qualquer espaço vazio (ou num dia sem venda) desmarca o dia selecionado */}
         <Pressable style={{ gap: 14 }} onPress={() => { if (diaSel) setDia(null); }}
           onLayout={(e) => { contPressY.current = e.nativeEvent.layout.y; }}>
+        {/* o calendário (topo + grade) arrasta pro lado pra trocar de mês */}
+        <View {...pan.panHandlers} style={{ gap: 14 }}
+          onLayout={(e) => { larguraRef.current = e.nativeEvent.layout.width; }}>
         {/* topo do mês: navegação + faturamento */}
         <Aparece>
           <View style={styles.card}>
@@ -262,6 +298,7 @@ export function CalendarioScreen() {
             </Animated.View>
           </View>
         </Aparece>
+        </View>
 
         {/* vendas do dia selecionado, ou dica */}
         {diaSel ? (
