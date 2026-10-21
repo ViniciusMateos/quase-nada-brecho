@@ -157,9 +157,12 @@ export function RunScreen() {
 
   useEffect(() => {
     let alive = true;
+    let reconectTimer: ReturnType<typeof setTimeout> | null = null;
+    const FINAIS = ['finalizado', 'parado', 'erro', 'sem_sessao'];
 
     const conectar = async () => {
       if (!alive) return;
+      if (reconectTimer) { clearTimeout(reconectTimer); reconectTimer = null; }
       try { wsRef.current?.close(); } catch { /* no-op */ }
       setConectando(true);
       try {
@@ -171,8 +174,9 @@ export function RunScreen() {
       if (!alive) return;
       const ws = new WebSocket(url);
       wsRef.current = ws;
-      // o server reenvia TODO o histórico ao conectar → zera pra não duplicar na reconexão
-      ws.onopen = () => { if (alive) setLinhas([]); };
+      // conectou: já sai do "carregando" (mesmo sem linha ainda, nos ~70s de abrir o
+      // navegador). O server reenvia TODO o histórico ao abrir → zera pra não duplicar.
+      ws.onopen = () => { if (alive) { setLinhas([]); setConectando(false); } };
       ws.onmessage = (e) => {
         if (!alive) return;
         setConectando(false);
@@ -186,8 +190,20 @@ export function RunScreen() {
       };
       ws.onerror = () => { if (alive) setConectando(false); };
       ws.onclose = async () => {
-        if (alive) setConectando(false);
-        try { const d = await api.getRun(runId); if (alive) setStatus(d.status); } catch {}
+        if (!alive) return;
+        setConectando(false);
+        let fin = false;
+        try {
+          const d = await api.getRun(runId);
+          if (alive) setStatus(d.status);
+          fin = FINAIS.includes(d.status);
+        } catch {}
+        // o WS às vezes cai sozinho no meio da run (1006). Se a run AINDA está rodando,
+        // reconecta pra não congelar os logs (o server reenvia o histórico ao reconectar).
+        if (alive && !fin) {
+          if (reconectTimer) clearTimeout(reconectTimer);
+          reconectTimer = setTimeout(() => { if (alive) conectar(); }, 1500);
+        }
       };
     };
 
@@ -198,7 +214,12 @@ export function RunScreen() {
       if (st === 'active' && alive) conectar();
     });
 
-    return () => { alive = false; wsRef.current?.close(); sub.remove(); };
+    return () => {
+      alive = false;
+      if (reconectTimer) clearTimeout(reconectTimer);
+      wsRef.current?.close();
+      sub.remove();
+    };
   }, [runId]);
 
   async function parar() {
