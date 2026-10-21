@@ -158,9 +158,23 @@ class RunManager:
                 print(f"[sync] falha ao espelhar planilha: {e}", flush=True)
         cmd = [settings.PYTHON_BIN] + scraper.montar_cmd(params)
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+        # HEADED sob display virtual (Xvfb) em vez de headless. MEDIDO no Bots e confirmado aqui:
+        # o Chromium HEADLESS pega o 1º lote (~68 posts) e o carregador infinito do IG NÃO
+        # re-engata — a run morre "incompleta" (precisava rodar 2-3x pra pegar). Com janela
+        # (mesmo virtual) o feed desce inteiro numa run só. xvfb-run cria um display descartável
+        # por run (sem daemon, sem sudo). Liga por padrão; desliga com BRECHO_XVFB=0 no .env.
+        # Import de cookie é só validação HTTP (sem browser) → não precisa de Xvfb nem headed.
+        eh_import = bool((params or {}).get("import_cookies"))
+        if not eh_import and os.environ.get("BRECHO_XVFB", "1").strip().lower() not in ("0", "false", "no", "off"):
+            cmd = ["xvfb-run", "-a"] + cmd
+            env["IG_HEADLESS"] = "0"
         run.proc = await asyncio.create_subprocess_exec(
             *cmd, cwd=str(scraper.worker_dir()),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env,
+            # grupo de processo PRÓPRIO: o worker vira `xvfb-run → python → chromium → Xvfb`.
+            # Sem isto, o stop mataria só o xvfb-run e deixaria python/chromium/Xvfb ÓRFÃOS
+            # comendo CPU (o problema clássico do server 1). Com o grupo, o stop mata a árvore.
+            start_new_session=True,
         )
         run.status = "rodando"
         asyncio.create_task(self._pump(run))
@@ -357,12 +371,18 @@ class RunManager:
     def _parar_gracioso(self, proc):
         """Manda SIGINT (= Ctrl+C) pro worker cair no `except KeyboardInterrupt` e sair LIMPO
         ('Interrompido' + fecha o browser no finally do playwright), em vez de SIGTERM que
-        virava erro. Só escala pra SIGTERM e depois SIGKILL se ele teimar em não sair."""
+        virava erro. Só escala pra SIGTERM e depois SIGKILL se ele teimar em não sair.
+
+        Sinaliza o GRUPO inteiro (xvfb-run → python → chromium → Xvfb): com o Xvfb no meio,
+        matar só o proc deixava chromium/Xvfb órfãos rodando (CPU presa no server 1)."""
         def _sinal(sig):
             try:
-                proc.send_signal(sig)
+                os.killpg(os.getpgid(proc.pid), sig)      # o grupo inteiro
             except Exception:
-                pass
+                try:
+                    proc.send_signal(sig)
+                except Exception:
+                    pass
         _sinal(signal.SIGINT)                     # Ctrl+C — saída limpa
 
         async def _escalar():
@@ -371,10 +391,7 @@ class RunManager:
                 _sinal(signal.SIGTERM)
                 await asyncio.sleep(6)
                 if proc.returncode is None:
-                    try:
-                        proc.kill()               # chromium travado: mata na marra
-                    except Exception:
-                        pass
+                    _sinal(signal.SIGKILL)        # chromium/Xvfb travado: mata na marra
         asyncio.create_task(_escalar())
 
     def listar(self):
