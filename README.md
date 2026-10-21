@@ -68,9 +68,10 @@ quase-nada-brecho/
   lado que abre uma explicação rápida do termo (o que é, a fórmula, um exemplo) — no Dashboard
   e no Calendário.
 - **Calendário de vendas** — calendário navegável por mês que mostra as **vendas por dia** e,
-  no topo, **faturamento, lucro, margem e ROI** do mês. Cada peça vendida guarda a **data da
-  venda** (editável; quando é estimada — backfill/scraper — pede confirmação); tocar numa
-  venda abre a peça pra editar.
+  no topo, **faturamento, lucro, margem e ROI** do mês. Troca de mês pelas setas **ou
+  arrastando pro lado** (segue o dedo + transição slide/fade). Cada peça vendida guarda a
+  **data da venda** (editável; quando é estimada — backfill/scraper — pede confirmação); tocar
+  numa venda abre a peça pra editar.
 - **Histórico** — cada raspagem vira um registro com o que mudou (atualizadas, relacionadas,
   vendidas) e um log por peça (NOVA/RELACIONADA/ATUALIZADA/VENDIDA), filtrável por período.
 - **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
@@ -172,7 +173,9 @@ No app (Expo Go) → **Configurações** → URL = a `https://xxxx.loca.lt`, tok
   `eas update --branch preview` — sem build nem loja. Só o **nativo** (splash, ícone, Live
   Activity, lib nova) ainda exige build. `runtimeVersion` fica **fixo** (`1.0.0`) pra os
   updates continuarem compatíveis com os builds instalados; só sobe quando o nativo quebrar.
-- **Scraper** roda headless no servidor. Ele **rola o perfil e intercepta as respostas**
-  (em vez de chamar a API em rajada), o que evita o rate-limit do Instagram. Ainda sai por
+- **Scraper** roda **headed num display virtual (Xvfb)** no servidor — o Chromium headless
+  estrangulava o scroll infinito do IG (pegava o 1º lote e parava); com janela, mesmo virtual,
+  o feed desce inteiro numa run só (toggle `BRECHO_XVFB`). Ele **rola o perfil e intercepta as
+  respostas** (em vez de chamar a API em rajada), o que evita o rate-limit do Instagram. Ainda sai por
   um **proxy residencial** (túnel SSH reverso pela internet de casa) pra usar um IP de
   verdade — veja [`docs/PROXY_RESIDENCIAL.md`](docs/PROXY_RESIDENCIAL.md).
