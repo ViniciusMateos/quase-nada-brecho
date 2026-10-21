@@ -268,43 +268,28 @@ class RunManager:
             pass
 
     async def _maybe_push_progresso(self, run):
-        """Push de progresso com a barrinha, com throttle (>=15% ou >=25s; nunca 100%)."""
+        """Atualiza a barra viva da Live Activity (throttle leve). SEM LA, não manda NADA:
+        o progresso aparece na tela da Run (logs ao vivo + barra) e no fim vem a notificação
+        de conclusão. Antes, sem LA, isto mandava notificação de PROGRESSO a cada ~15% — poluía
+        o lock screen com um monte de '... 14% descendo o feed'. Removido de propósito."""
         p = run.progress
-        if not p or not p.get("total"):
+        if not p or not p.get("total") or not run.la_token:
             return
         pct = max(0, min(100, round(p["done"] / p["total"] * 100)))
         if pct >= 100:
             return
         agora = time.time()
-        # Com Live Activity: atualiza a barra viva (throttle leve, sem poluir) e NÃO
-        # manda notificação de progresso — a barra viva já é o indicador ao vivo.
-        if run.la_token:
-            if pct - run._ult_la_pct < 3 and (agora - run._ult_la_t) < 3:
-                return
-            run._ult_la_pct = pct
-            run._ult_la_t = agora
-            try:
-                ok, det = await asyncio.to_thread(
-                    liveactivity.atualizar, run.la_token, pct,
-                    p["done"], p["total"], p.get("label", ""), run.la_bundle)
-                print(f"[la] update {run.id} {pct}% -> ok={ok} {det}", flush=True)
-            except Exception as e:
-                print(f"[la] update {run.id} EXC {e}", flush=True)
+        if pct - run._ult_la_pct < 3 and (agora - run._ult_la_t) < 3:
             return
-        # Sem Live Activity → notificação de progresso com throttle (fallback).
-        if pct - run._ult_push_pct < 15 and (agora - run._ult_push_t) < 25:
-            return
-        run._ult_push_pct = pct
-        run._ult_push_t = agora
-        barra = notify.barra_progresso(p["done"], p["total"])
-        label = p.get("label") or f"{p['done']}/{p['total']}"
+        run._ult_la_pct = pct
+        run._ult_la_t = agora
         try:
-            await asyncio.to_thread(
-                notify.enviar, run.titulo, f"{barra}  ·  {label}",
-                {"type": "progress", "runId": run.id, "pct": pct,
-                 "done": p["done"], "total": p["total"], "label": p.get("label", "")})
-        except Exception:
-            pass
+            ok, det = await asyncio.to_thread(
+                liveactivity.atualizar, run.la_token, pct,
+                p["done"], p["total"], p.get("label", ""), run.la_bundle)
+            print(f"[la] update {run.id} {pct}% -> ok={ok} {det}", flush=True)
+        except Exception as e:
+            print(f"[la] update {run.id} EXC {e}", flush=True)
 
     async def _maybe_status_la(self, run, linha):
         """Enquanto NÃO há progresso real (fase de abrir navegador/logar/carregar feed —
