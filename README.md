@@ -15,8 +15,8 @@ quase-nada-brecho/
 │   ├── db.py         schema + conexão SQLite
 │   ├── pecas.py      CRUD das peças + KPIs do dashboard
 │   ├── drops.py      CRUD dos drops + histórico unificado por data
-│   ├── scraper.py    ponte com o worker + import da planilha → SQLite
-│   ├── run_manager.py  roda o scraper como subprocesso e faz stream do log
+│   ├── scraper.py    ponte com a raspagem no emulador (via backend dos Bots) + reconciliação
+│   ├── run_manager.py  runs com log ao vivo — espelha no app a run do emulador
 │   ├── notify.py     push (Expo) quando a raspagem termina
 │   └── settings.py   config (token, paths, worker)
 ├── frontend/         Expo / React Native (mesmo esqueleto dos outros apps QN)
@@ -29,7 +29,7 @@ quase-nada-brecho/
 │       ├── theme.ts + theme-context  paletas dark/light + troca animada (fade)
 │       └── constants/otaVersion  contador OTA (sobe a cada eas update)
 └── workers/
-    └── brecho-tracker/   scraper Playwright do @brechoquasenadaa (movido do Bots)
+    └── brecho-tracker/   scraper Playwright antigo (legado — a raspagem hoje é pelo emulador)
 ```
 
 ## Funcionalidades
@@ -49,7 +49,15 @@ quase-nada-brecho/
 - **Consignado** — marca a peça como de terceiro + quanto fica pra você, escolhendo entre
   **% da venda** ou **valor fixo (R$)**; os relatórios (faturamento, lucro, dashboard, saldo
   do drop) contam **só a sua parte**, não o valor cheio (e mostram a % equivalente no fixo).
-- **Manual (trava)** — marca peças 100% manuais pra o scraper **nunca** atualizar nem promover.
+- **Manual (trava)** — protege os dados da peça (nome, preço, medidas, legenda, foto): a
+  raspagem **não muda nada nem marca venda**. Ela só guarda o **link do post** e, se a legenda
+  disser "vendido", **avisa pra conferir** (`CONFERIR` no log e no histórico da peça) — feito
+  pra conjunto de 2 peças, que pode vender só uma.
+- **Histórico da peça** — no editor, a linha do tempo do que aconteceu com a peça: criada, nova
+  do Insta, preço mudou, vendida, dividida, conferir venda — pela raspagem ou por você.
+- **Dividir conjunto** — vendeu só uma parte? A parte vendida vira uma peça nova já vendida
+  (mesmo drop, data e foto) e o conjunto fica com o preço/custo que sobrou, à venda e com o
+  link do post. Dashboard, calendário e drops contam certo sem ajuste nenhum.
 - **Template do post** — dentro de cada peça, a legenda pronta (nome, medidas, condição,
   preço, observação, hashtags) com botão de **copiar** e link **abrir no Instagram**. Com o
   toggle **Manual** ligado, o template vira **editável** e o texto customizado é salvo.
@@ -74,31 +82,23 @@ quase-nada-brecho/
   numa venda abre a peça pra editar.
 - **Histórico** — cada raspagem vira um registro com o que mudou (atualizadas, relacionadas,
   vendidas) e um log por peça (NOVA/RELACIONADA/ATUALIZADA/VENDIDA), filtrável por período.
-- **Sincronizar (scraper)** — roda o worker `brecho-tracker` (Playwright) que raspa o
-  Instagram do brechó **descendo o perfil como humano** e interceptando as respostas
-  (graphql) que a própria página dispara — colhendo **só os posts da própria conta** (o IG
-  serve post de outras contas junto: sugestão/tag/reels) — sem chamar a API em rajada, então **não toma
-  rate-limit** e pega o feed inteiro numa run. A **completude** é conferida pelo total de posts
-  do perfil: se o carregamento infinito não engatar (empaca nos primeiros), ele **re-arma** e,
-  no limite, **aborta com erro** (raspagem incompleta) em vez de reconciliar meia raspagem. Se
-  a sessão do Instagram estiver inválida (login/checkpoint/conta indisponível), a run não vira
-  **erro** e sim **sem sessão** (a run identifica a causa real e pede pra reconectar, sem tom de
-  "deu ruim"). O worker é um **raspador puro**: só despeja
-  os posts parseados; **quem reconcilia é o backend**. O **app é a fonte única da verdade**
-  e a planilha virou só um **espelho** gerado dele. A reconciliação casa cada post por
-  `#p` → `code` → nome, atualiza preço/medidas/venda (Insta ganha nas peças disponíveis) e
-  gera um **log rico por peça**. Tem três modos: **Atualizar** (grava), **Prévia** (roda
-  igualzinho mas dá rollback, não grava nada) e **Completa** (re-lê o feed inteiro e
-  recaptura as fotos, pra quando um link do Insta expira). Não deixa **duas raspagens ao
-  mesmo tempo**, tem **logs ao vivo** (WebSocket + UI animada), barra de progresso e
-  **Live Activity** (anel de progresso na tela de bloqueio / ilha dinâmica). Peças
-  **manuais/travadas** o scraper nunca mexe. No topo, um **cartão de status da conta**
-  mostra qual **@conta** está conectada e se a **sessão está viva** (verde "pode rodar" /
-  vermelho "reconecte") — a checagem ao vivo bate no IG por uma **requisição HTTP** (~2s,
-  sem abrir navegador), pra você saber de cara se dá pra raspar ou se precisa reconectar.
-  Se as peças de um **drop manual** aparecem no Insta, o app entende que o drop foi
-  publicado: mantém as peças no drop, marca-o como **publicado** e **sincroniza a data**
-  com o post.
+- **Raspar Instagram (scraper)** — a raspagem roda num **emulador Android** com uma **conta
+  auxiliar** lendo o perfil do brechó no app do Instagram (a **conta da loja nunca é usada**):
+  o app pede, o backend enfileira um job no backend dos Bots, o agente do PC escolhe uma conta
+  apta (com fallback se uma falhar) e o device devolve os posts pra cá. São duas partes:
+  **peças novas** (lê o feed do topo até o 1º post que o app já conhece) e **conferência das
+  peças à venda** (abre cada uma direto pelo link do post e vê se virou "vendido" ou mudou o
+  preço — o Insta ganha nas disponíveis). Peça postada que ficou **sem link** é caçada no feed
+  até o drop dela. A reconciliação casa por `#p` → `code` → nome e chega **em lotes de 10** (o
+  app vai se atualizando durante a run). O **print da foto sai limpo** (sem a bolha de repost e
+  o contador "1/3" do Insta) e fica salvo no servidor — não depende do link de imagem do IG,
+  que expira. **Logs ao vivo** em seções, com o **status colorido** no começo de cada peça
+  (NOVO, VENDIDA, ATUALIZADA com preço antigo → novo, DISPONÍVEL…) e um **resumo** no fim;
+  barra de progresso, **Live Activity** e **parar imediato**. No topo da tela, o **painel de
+  prontidão** mostra se o emulador está online, o status das contas auxiliares (apta /
+  descansando até HH:MM / bloqueada) e a próxima da vez. Há ainda a **recaptura de fotos**
+  (modo `fotos`), que passa por todas as peças com link e regrava só a foto. Se as peças de um
+  **drop manual** aparecem no Insta, o drop vira **publicado** e a data sincroniza com o post.
 - **Configurações** (engrenagem no Hub) — **tema claro/escuro** (troca com um fade de
   "cortina" no app inteiro) e **idioma PT/EN** (troca com a animação de embaralhar as
   letras). As categorias traduzem por dicionário (pela 1ª palavra do nome) e o filtro
@@ -110,16 +110,15 @@ quase-nada-brecho/
 
 ### Fluxo do scraper
 
-1. **Conectar Instagram** — em *Conta do Instagram* dá pra salvar login+senha **no aparelho**
-   (SecureStore, nunca no servidor), com **usuário editável** e **olho** pra ver/ocultar a senha.
-   Ao reconectar, o app preenche e loga sozinho na WebView, mas **só captura a sessão quando você
-   toca em "Conectar"** — assim dá pra resolver captcha/checkpoint/confirmar email **antes** e
-   nunca capturar uma sessão inválida.
-2. **Atualizar agora** — dispara a raspagem; acompanha os logs em tempo real.
-3. Ao fim, o backend reconcilia o que foi raspado com o acervo do app e re-espelha a planilha.
+1. **Atualizar** (tela *Raspar Instagram*) — dispara a raspagem no emulador; antes, o painel de
+   prontidão mostra se o emulador está online e se tem conta auxiliar apta.
+2. Acompanhe a run ao vivo: Preparação → Peças novas → Conferindo as peças à venda → O que
+   mudou → Resumo.
+3. **Recaptura de fotos** — `POST /scraper/emulador/fotos/raspar` (sem botão no app; ~2h pra
+   ~400 peças, ocupa o emulador principal nesse tempo).
 
-> O worker tem dependências próprias (Playwright/Chrome) — veja
-> `workers/brecho-tracker/requirements.txt` e rode `playwright install chromium` no servidor.
+> A parte do device depende da stack `quase-nada-bots-device` (agente + MuMu) e do backend dos
+> Bots — configure `BOTS_BACKEND_URL` e `BOTS_BACKEND_TOKEN` no `.env` do backend.
 
 ## Rodar
 
@@ -173,9 +172,9 @@ No app (Expo Go) → **Configurações** → URL = a `https://xxxx.loca.lt`, tok
   `eas update --branch preview` — sem build nem loja. Só o **nativo** (splash, ícone, Live
   Activity, lib nova) ainda exige build. `runtimeVersion` fica **fixo** (`1.0.0`) pra os
   updates continuarem compatíveis com os builds instalados; só sobe quando o nativo quebrar.
-- **Scraper** roda **headed num display virtual (Xvfb)** no servidor — o Chromium headless
-  estrangulava o scroll infinito do IG (pegava o 1º lote e parava); com janela, mesmo virtual,
-  o feed desce inteiro numa run só (toggle `BRECHO_XVFB`). Ele **rola o perfil e intercepta as
-  respostas** (em vez de chamar a API em rajada), o que evita o rate-limit do Instagram. Ainda sai por
-  um **proxy residencial** (túnel SSH reverso pela internet de casa) pra usar um IP de
-  verdade — veja [`docs/PROXY_RESIDENCIAL.md`](docs/PROXY_RESIDENCIAL.md).
+- **Scraper** roda no **emulador (MuMu) do PC**, pela stack dos Bots — o servidor do brechó só
+  enfileira o job, recebe os posts e as fotos (`/scraper/emulador/*`) e espelha a run no app.
+  As fotos ficam em `backend/data/uploads/scraper-<code>.jpg`, servidas em `/uploads` com
+  `?v=<data do arquivo>` pra o app não mostrar a versão velha do cache. O worker Playwright
+  em `workers/brecho-tracker` (headed sob Xvfb + proxy residencial, ver
+  [`docs/PROXY_RESIDENCIAL.md`](docs/PROXY_RESIDENCIAL.md)) ficou como legado.
