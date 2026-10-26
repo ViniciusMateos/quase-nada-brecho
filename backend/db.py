@@ -42,6 +42,16 @@ CREATE TABLE IF NOT EXISTS pecas (
 
 CREATE INDEX IF NOT EXISTS idx_pecas_drop ON pecas(drop_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pecas_code ON pecas(code) WHERE code IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS peca_eventos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    peca_id     INTEGER NOT NULL REFERENCES pecas(id) ON DELETE CASCADE,
+    criado_em   TEXT    NOT NULL DEFAULT (datetime('now')),
+    tipo        TEXT,                         -- VENDIDA | ATUALIZADA | RELACIONADA | NOVA | CRIADA | DESMARCADA
+    texto       TEXT,                         -- o que mudou ('preço R$20 → R$25'); pode ser vazio
+    origem      TEXT    NOT NULL DEFAULT 'scraper'   -- scraper | manual | histórico
+);
+CREATE INDEX IF NOT EXISTS idx_peca_eventos_peca ON peca_eventos(peca_id);
 """
 
 # colunas adicionadas depois da v1 — migração leve pra bancos já criados
@@ -86,6 +96,12 @@ def init_db():
         c.execute(
             "UPDATE pecas SET vendida_em = COALESCE(substr(postado_em,1,10), substr(criado_em,1,10)), "
             "venda_estimada = 1 WHERE vendida = 1 AND (vendida_em IS NULL OR vendida_em = '')")
+        # backfill do histórico por peça: toda peça JÁ vendida ganha um evento 'VENDIDA' (uma vez só,
+        # via NOT IN), datado pela data da venda — pra o histórico não nascer vazio nas vendas antigas.
+        c.execute(
+            "INSERT INTO peca_eventos (peca_id, criado_em, tipo, texto, origem) "
+            "SELECT id, COALESCE(vendida_em, substr(criado_em,1,10)), 'VENDIDA', '', 'histórico' "
+            "FROM pecas WHERE vendida = 1 AND id NOT IN (SELECT peca_id FROM peca_eventos)")
 
 
 @contextmanager

@@ -94,7 +94,16 @@ def _coagir(campos):
 
 
 def _url(imagem):
-    return f"/uploads/{imagem}" if imagem else None
+    """URL da foto local, com ?v=<mtime>. O print recapturado é gravado com o MESMO nome
+    (scraper-<code>.jpg) e o app guarda imagem em cache pela URL — sem a versão ele continuaria
+    mostrando a foto velha (com as bolhas do IG) depois da recaptura."""
+    if not imagem:
+        return None
+    try:
+        import settings
+        return f"/uploads/{imagem}?v={int((settings.UPLOADS_DIR / imagem).stat().st_mtime)}"
+    except Exception:
+        return f"/uploads/{imagem}"
 
 
 def _peca_dict(r):
@@ -175,7 +184,23 @@ def add(campos):
             },
         )
         pid = cur.lastrowid
+        _reg_evento(c, pid, "CRIADA", [], origem="manual")
     return obter(pid)
+
+
+def _log_edicao_manual(c, peca_id, antes, d):
+    """Histórico das mudanças MANUAIS que importam: virou/desmarcou vendida ou mudou o preço."""
+    if "vendida" in d and int(d.get("vendida") or 0) != int(antes["vendida"] or 0):
+        if d.get("vendida"):
+            pr = _rs(d.get("venda", antes["venda"]))
+            _reg_evento(c, peca_id, "VENDIDA", [pr] if pr else [], origem="manual")
+        else:
+            _reg_evento(c, peca_id, "DESMARCADA", ["venda desfeita"], origem="manual")
+        return
+    if "venda" in d and _rs(d.get("venda")) != _rs(antes["venda"]):
+        _reg_evento(c, peca_id, "ATUALIZADA",
+                    [f"preço {_rs(antes['venda']) or '—'} → {_rs(d.get('venda')) or '—'}"],
+                    origem="manual")
 
 
 def editar(peca_id, campos):
@@ -199,7 +224,10 @@ def editar(peca_id, campos):
     sets = ", ".join(f"{k} = :{k}" for k in d)
     d["id"] = peca_id
     with conn() as c:
+        antes = c.execute("SELECT vendida, venda FROM pecas WHERE id = ?", (peca_id,)).fetchone()
         c.execute(f"UPDATE pecas SET {sets} WHERE id = :id", d)
+        if antes:
+            _log_edicao_manual(c, peca_id, antes, d)
     return obter(peca_id)
 
 
@@ -207,6 +235,52 @@ def set_imagem(peca_id, nome_arquivo):
     with conn() as c:
         c.execute("UPDATE pecas SET imagem = ? WHERE id = ?", (nome_arquivo, peca_id))
     return obter(peca_id)
+
+
+def dividir(peca_id, campos):
+    """"Dividir conjunto": vendeu só UMA parte de uma peça que é conjunto. Cria uma peça NOVA pra parte
+    vendida (já vendida, mesmo drop, mesma data do post, foto do conjunto, travada) e o conjunto fica
+    com o preço e o custo que SOBRARAM, à venda e com o link do post. Como dashboard, calendário e drops
+    somam peça por peça, os números ficam certos sem mudar nada neles. O custo da parte sai proporcional
+    ao preço. Devolve {"original": peça, "parte": peça nova}; ValueError se não dá pra dividir."""
+    d = campos or {}
+    nome = (d.get("nome") or "").strip()
+    venda = _num(d.get("venda"))
+    vendida_em = (d.get("vendida_em") or date.today().isoformat())[:10]
+    with conn() as c:
+        p = c.execute("SELECT * FROM pecas WHERE id = ?", (peca_id,)).fetchone()
+        if not p:
+            raise ValueError("peça não encontrada")
+        if p["vendida"]:
+            raise ValueError("essa peça já está vendida")
+        if not nome:
+            raise ValueError("diz qual parte vendeu")
+        total = _num(p["venda"])
+        if venda <= 0 or venda >= total:
+            raise ValueError(f"o preço da parte tem que ser maior que zero e menor que {_rs(total) or 'o do conjunto'}")
+        frac = venda / total
+        compra_parte = round(_num(p["compra"]) * frac, 2)
+        cv = p["consig_valor"]
+        cv_parte = round(_num(cv) * frac, 2) if cv else None
+        novo_num = _proximo_num(c)
+        cur = c.execute(
+            """INSERT INTO pecas (nome, item, condicao, compra, venda, vendida, vendida_em, venda_estimada,
+                                  imagem, imagem_url, drop_id, origem, postado_em, consignado, consig_tipo,
+                                  consig_pct, consig_valor, so_manual, observacao, num)
+               VALUES (?, ?, ?, ?, ?, 1, ?, 0, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, 1, ?, ?)""",
+            (nome, nome.split()[0], p["condicao"], compra_parte, venda, vendida_em,
+             p["imagem"], p["imagem_url"], p["drop_id"], p["postado_em"], p["consignado"],
+             p["consig_tipo"], p["consig_pct"], cv_parte, f"parte do conjunto #p{p['num']}", novo_num))
+        pid = cur.lastrowid
+        sobra = round(total - venda, 2)
+        c.execute("UPDATE pecas SET venda = ?, compra = ?, consig_valor = ? WHERE id = ?",
+                  (sobra, round(_num(p["compra"]) - compra_parte, 2),
+                   round(_num(cv) - cv_parte, 2) if cv else cv, peca_id))
+        _reg_evento(c, peca_id, "DIVIDIDA",
+                    [f"vendeu {nome} ({_rs(venda)}) → virou #p{novo_num}", f"sobrou {_rs(sobra)} à venda"],
+                    origem="manual")
+        _reg_evento(c, pid, "VENDIDA", [_rs(venda), f"parte do conjunto #p{p['num']}"], origem="manual")
+    return {"original": obter(peca_id), "parte": obter(pid)}
 
 
 def remover(peca_id):
@@ -242,6 +316,25 @@ def _ev(label, num, nome, mud):
     return base + ("  ·  " + "  ·  ".join(ms) if ms else "")
 
 
+def _reg_evento(c, peca_id, tipo, mud=None, origem="scraper"):
+    """Grava no HISTÓRICO da peça o que aconteceu (vendida, preço mudou, nova…). `mud` = lista de
+    strings de mudança (pode ser vazia). É o que o app mostra no detalhe da peça."""
+    if not peca_id:
+        return
+    texto = "  ·  ".join(m for m in (mud or []) if m)
+    c.execute("INSERT INTO peca_eventos (peca_id, tipo, texto, origem) VALUES (?, ?, ?, ?)",
+              (peca_id, tipo, texto, origem))
+
+
+def historico(peca_id):
+    """Eventos da peça, do mais novo pro mais antigo (pro detalhe da peça no app)."""
+    with conn() as c:
+        evs = rows(c.execute(
+            "SELECT id, criado_em, tipo, texto, origem FROM peca_eventos "
+            "WHERE peca_id = ? ORDER BY id DESC", (peca_id,)))
+    return {"eventos": evs}
+
+
 def _mudancas(antes, campos, v_insta):
     """Lista de 'campo antes → depois' — só o que REALMENTE mudou (Insta é a fonte da verdade)."""
     mud = []
@@ -273,32 +366,71 @@ def _mudancas(antes, campos, v_insta):
 
 
 # ───────────────────── import do scraper ─────────────────────────
-def upsert_scraper(items, preview=False):
+# O EMULADOR manda SEM data do post e SEM URL de CDN. NÃO sobrescreve esses campos com vazio —
+# senão apaga a data/imagem que a peça já tinha (foi o que criou o "drop fantasma" das sem-data).
+_PRESERVA_SE_VAZIO = ("postado_em", "imagem_url")
+def _campos_update(campos):
+    return {k: v for k, v in campos.items() if v or k not in _PRESERVA_SE_VAZIO}
+
+
+def _sync_travada(c, alvo, code, vend_nova, postado_em, trecho_vendido=None):
+    """Peça TRAVADA (so_manual): o scraper não mexe nos DADOS nem na VENDA dela. Ex.: conjunto de 2
+    peças — se só uma vende, a legenda diz "vendido" e marcar o conjunto inteiro estaria errado. Ele só:
+      - guarda o LINK do post (code): sem o link a conferência por link nunca alcança a peça;
+      - AVISA pra conferir na mão quando o post diz "vendido" e a peça está à venda no app — uma vez
+        por texto (não repete a cada raspagem enquanto o trecho "vendido" da legenda for o mesmo).
+    Devolve (label, mudanças): "CONFERIR" (aviso), "ATUALIZADA" (só ganhou o link) ou None."""
+    sets, params, mud = [], {"id": alvo["id"]}, []
+    if code and not alvo["code"]:
+        dono = c.execute("SELECT id FROM pecas WHERE code = ? AND id <> ?", (code, alvo["id"])).fetchone()
+        if not dono:                      # code é único: não rouba de outra peça
+            sets.append("code = :code")
+            params["code"] = code
+            mud.append("link do post guardado")
+    if postado_em and not alvo["postado_em"]:
+        sets.append("postado_em = :pe")
+        params["pe"] = postado_em
+    if sets:
+        c.execute(f"UPDATE pecas SET {', '.join(sets)} WHERE id = :id", params)
+    if vend_nova and not alvo["vendida"]:
+        aviso = f"post diz vendido: «{trecho_vendido}»" if trecho_vendido else "o post diz vendido"
+        ja = c.execute("SELECT texto FROM peca_eventos WHERE peca_id = ? AND tipo = 'CONFERIR' "
+                       "ORDER BY id DESC LIMIT 1", (alvo["id"],)).fetchone()
+        if not (ja and aviso in (ja["texto"] or "")):
+            return "CONFERIR", mud + [aviso]
+    return ("ATUALIZADA", mud) if mud else None
+
+
+def upsert_scraper(items, preview=False, limpar_imagem=True):
     """Recebe peças raspadas (com `code`) e sincroniza no banco:
       - já existe com esse code → atualiza (preserva compra/venda manuais);
       - existe uma peça MANUAL planejada de mesmo nome (sem code) → reconcilia:
         promove ela a 'scraper' (ganha o drop real, sai do planejamento);
       - senão → insere nova.
     Devolve stats {novas, atualizadas, reconciliadas, total}."""
-    novas = atualizadas = reconciliadas = recem_vendidas = conferidas = 0
+    novas = atualizadas = reconciliadas = recem_vendidas = conferidas = a_conferir = 0
     eventos = []   # log peça-a-peça do que muda NO APP (é o que aparece no run, dry ou normal)
     publicar = {}   # drop_id (manual) -> data do post no Insta: as peças do drop apareceram lá
     with conn() as c:
         for it in items:
             code = it.get("code")
-            if not code:
-                continue
+            numero = it.get("numero")   # #p<num> da legenda — casa até sem o link do post
+            if not code and not numero:
+                continue   # sem code E sem #p: não há como casar nem inserir com segurança
             # Insta é a fonte da verdade: nome, medidas, condição, vendida etc vêm de lá.
             campos = {
                 "nome": it.get("nome"), "item": it.get("item"), "tamanho": it.get("tamanho"),
                 "largura": _med_str(it.get("largura")), "comprimento": _med_str(it.get("comprimento")),
                 "condicao": it.get("condicao"), "vendida": 1 if it.get("vendida") else 0,
                 "imagem_url": it.get("imagem_url"), "postado_em": it.get("drop") or it.get("postado_em"),
-                # a foto OFICIAL do post (imagem_url) manda: limpa o upload local não-oficial do
-                # planejamento pra ela aparecer. Não baixa nada — usa o link do Insta (que expira;
-                # quando sumir, roda "Raspagem completa" que recaptura os links).
-                "imagem": None,
             }
+            # Playwright: a foto OFICIAL é a URL de CDN (imagem_url), então zera o upload local
+            # do planejamento (limpar_imagem=True) pra ela aparecer. EMULADOR: não há URL de CDN —
+            # a foto é o print recortado, gravado via set_imagem DEPOIS do upsert — então
+            # limpar_imagem=False NÃO mexe no `imagem` (preserva a foto local; não apaga nada de
+            # peça que o device não recapturou).
+            if limpar_imagem:
+                campos["imagem"] = None
             # preço do Insta manda quando a peça está DISPONÍVEL (o post traz R$). Peça vendida
             # não traz preço na legenda → NÃO mexe na venda (preserva o valor pro faturamento).
             v_insta = _num(it.get("venda"))
@@ -309,11 +441,10 @@ def upsert_scraper(items, preview=False):
             mj = _medida_json_circ(it.get("circunferencia"))
             if mj:
                 campos["medida"] = mj
-            nome_disp = (it.get("nome") or code)[:36]
+            nome_disp = (it.get("nome") or code or (f"#p{numero}" if numero else "?"))[:36]
             vend_nova = 1 if it.get("vendida") else 0
-            numero = it.get("numero")   # do #p<num> na legenda — chave de match mais confiável
             sel = ("id, so_manual, drop_id, origem, vendida, num, nome, venda, "
-                   "tamanho, largura, comprimento, condicao")
+                   "tamanho, largura, comprimento, condicao, code, postado_em")
             # casa por NÚMERO primeiro (pega até a peça manual planejada, sem depender do nome);
             # senão, casa por CÓDIGO do post (peça já raspada antes).
             alvo = None
@@ -323,33 +454,61 @@ def upsert_scraper(items, preview=False):
                 alvo = c.execute(f"SELECT {sel} FROM pecas WHERE code = ?", (code,)).fetchone()
             if alvo:
                 if alvo["so_manual"]:
-                    eventos.append(f"TRAVADA | {nome_disp} - p#{alvo['num']} (ignorada)")
-                    continue   # peça travada como manual: scraper não atualiza nem duplica
+                    # travada: dados intocados; só o link do post e a venda sincronizam
+                    r = _sync_travada(c, alvo, code, vend_nova, campos.get("postado_em"),
+                                      it.get("trecho_vendido"))
+                    if r:
+                        label, mud = r
+                        if label == "CONFERIR":
+                            a_conferir += 1
+                        else:
+                            atualizadas += 1
+                        eventos.append(_ev(label, alvo["num"], nome_disp, mud + ["peça travada: confere na mão"]))
+                        _reg_evento(c, alvo["id"], label, mud)
+                    else:
+                        conferidas += 1
+                    continue
                 virou_vendida = bool(vend_nova and not alvo["vendida"])
-                mud = _mudancas(alvo, campos, v_insta)
+                mud = _mudancas(alvo, _campos_update(campos), v_insta)
                 if virou_vendida:   # carimba a data da venda (estimada = dia da detecção; confirmável no app)
                     campos["vendida_em"] = date.today().isoformat()
                     campos["venda_estimada"] = 1
-                sets = ", ".join(f"{k} = :{k}" for k in campos)
-                # atualiza; se casou uma peça MANUAL (pelo num), promove a scraper e dá o code
-                c.execute(f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
-                          {**campos, "code": code, "id": alvo["id"]})
-                manual = alvo["origem"] == "manual"
+                cu = _campos_update(campos)   # pula postado_em/imagem_url VAZIOS (não apaga o existente)
+                sets = ", ".join(f"{k} = :{k}" for k in cu)
+                if code:
+                    # post COM link: fonte completa → promove a scraper e grava o code
+                    c.execute(f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
+                              {**cu, "code": code, "id": alvo["id"]})
+                else:
+                    # post SEM link (SHARE falhou) casado por #p: atualiza os campos (inclui vendida),
+                    # mas NÃO promove a scraper nem mexe em code/postado_em — senão a peça ficaria sem
+                    # data e reviveria o "drop fantasma". Melhor registrar a venda do que perdê-la.
+                    c.execute(f"UPDATE pecas SET {sets} WHERE id = :id", {**cu, "id": alvo["id"]})
+                manual = (alvo["origem"] == "manual") and bool(code)   # só conta reconciliação se deu code
                 if manual:
                     reconciliadas += 1
                 if virou_vendida:
                     recem_vendidas += 1
                     mud = ([_rs(alvo["venda"])] if _rs(alvo["venda"]) else []) + mud
                     eventos.append(_ev("VENDIDA", alvo["num"], nome_disp, mud))
+                    _reg_evento(c, alvo["id"], "VENDIDA", mud)
                 elif manual:
                     eventos.append(_ev("RELACIONADA", alvo["num"], nome_disp, mud))
+                    _reg_evento(c, alvo["id"], "RELACIONADA", mud)
                 elif mud:
                     atualizadas += 1
                     eventos.append(_ev("ATUALIZADA", alvo["num"], nome_disp, mud))
+                    _reg_evento(c, alvo["id"], "ATUALIZADA", mud)
                 else:
                     conferidas += 1   # peça existente SEM mudança real → não loga (evita spam)
                 if alvo["drop_id"] is not None and campos.get("postado_em"):
                     publicar[alvo["drop_id"]] = campos["postado_em"]
+                continue
+
+            # não casou por #p nem por code. Sem link não dá pra inserir (viraria peça sem
+            # code/sem data = drop fantasma) — registra e segue; só insere peça NOVA se tiver code.
+            if not code:
+                eventos.append(f"SEM LINK | {nome_disp} - #p{numero or '?'} (não casou, pulada)")
                 continue
 
             # reconciliação por NOME (peça manual planejada sem num/tag na legenda — legado).
@@ -360,25 +519,38 @@ def upsert_scraper(items, preview=False):
                     f"SELECT {sel} FROM pecas WHERE origem = 'manual' AND code IS NULL "
                     "AND lower(trim(nome)) = ?", (nome,)).fetchone()
             if match and match["so_manual"]:
-                eventos.append(f"TRAVADA | {nome_disp} - p#{match['num']} (ignorada)")
-                continue   # peça TRAVADA de mesmo nome já existe → não atualiza NEM duplica
+                # travada de mesmo nome: não duplica nem mexe nos dados — só link do post e venda
+                r = _sync_travada(c, match, code, vend_nova, campos.get("postado_em"),
+                                  it.get("trecho_vendido"))
+                if r:
+                    label, mud = r
+                    if label == "CONFERIR":
+                        a_conferir += 1
+                    else:
+                        atualizadas += 1
+                    eventos.append(_ev(label, match["num"], nome_disp, mud + ["peça travada: confere na mão"]))
+                    _reg_evento(c, match["id"], label, mud)
+                else:
+                    conferidas += 1
+                continue
             if match:
                 virou_vendida = bool(vend_nova and not match["vendida"])
-                mud = _mudancas(match, campos, v_insta)
+                mud = _mudancas(match, _campos_update(campos), v_insta)
                 if virou_vendida:   # carimba a data da venda (estimada = dia da detecção)
                     campos["vendida_em"] = date.today().isoformat()
                     campos["venda_estimada"] = 1
-                sets = ", ".join(f"{k} = :{k}" for k in campos)
+                cu = _campos_update(campos)   # pula postado_em/imagem_url VAZIOS (não apaga o existente)
+                sets = ", ".join(f"{k} = :{k}" for k in cu)
                 if match["drop_id"] is not None:
                     c.execute(
                         f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code WHERE id = :id",
-                        {**campos, "code": code, "id": match["id"]})
+                        {**cu, "code": code, "id": match["id"]})
                     if campos.get("postado_em"):
                         publicar[match["drop_id"]] = campos["postado_em"]
                 else:
                     c.execute(
                         f"UPDATE pecas SET {sets}, origem = 'scraper', code = :code, drop_id = NULL "
-                        "WHERE id = :id", {**campos, "code": code, "id": match["id"]})
+                        "WHERE id = :id", {**cu, "code": code, "id": match["id"]})
                 reconciliadas += 1
                 label = "RELACIONADA"
                 if virou_vendida:
@@ -386,9 +558,10 @@ def upsert_scraper(items, preview=False):
                     label = "VENDIDA"
                     mud = ([_rs(match["venda"])] if _rs(match["venda"]) else []) + mud
                 eventos.append(_ev(label, match["num"], nome_disp, mud))
+                _reg_evento(c, match["id"], label, mud)
             else:
                 novo_num = _proximo_num(c)   # nova peça raspada ganha código sequencial
-                c.execute(
+                cur = c.execute(
                     """INSERT INTO pecas (nome, item, tamanho, largura, comprimento, medida,
                                           condicao, compra, venda, vendida,
                                           imagem_url, origem, code, postado_em, num)
@@ -404,6 +577,7 @@ def upsert_scraper(items, preview=False):
                     recem_vendidas += 1
                     mud = mud + ["já vendida"]
                 eventos.append(_ev("NOVA", novo_num, nome_disp, mud))
+                _reg_evento(c, cur.lastrowid, "NOVA", mud)
 
         # drops manuais cujas peças apareceram no Insta → publicado + data do Insta (fonte da verdade)
         for did, data_post in publicar.items():
@@ -413,7 +587,7 @@ def upsert_scraper(items, preview=False):
             c.rollback()   # dry-run: calcula o que MUDARIA e desfaz tudo (não grava nada)
 
     return {"novas": novas, "atualizadas": atualizadas, "reconciliadas": reconciliadas,
-            "recem_vendidas": recem_vendidas, "conferidas": conferidas,
+            "recem_vendidas": recem_vendidas, "conferidas": conferidas, "a_conferir": a_conferir,
             "drops_publicados": len(publicar), "eventos": eventos,
             "total": novas + atualizadas + reconciliadas}
 
