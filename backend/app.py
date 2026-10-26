@@ -73,10 +73,26 @@ async def editar_peca(peca_id: int, payload: dict):
     return p
 
 
+@app.get("/brecho/pecas/{peca_id}/historico", dependencies=[Depends(auth)])
+async def peca_historico(peca_id: int):
+    """Histórico da peça: o que aconteceu com ela (vendida, preço mudou, nova…) — do mais novo
+    pro mais antigo. Alimenta a seção 'Histórico' no detalhe da peça."""
+    return await asyncio.to_thread(pecas.historico, peca_id)
+
+
 @app.delete("/brecho/pecas/{peca_id}", dependencies=[Depends(auth)])
 async def remover_peca(peca_id: int):
     pecas.remover(peca_id)
     return {"ok": True}
+
+
+@app.post("/brecho/pecas/{peca_id}/dividir", dependencies=[Depends(auth)])
+async def dividir_peca(peca_id: int, payload: dict):
+    """Vendeu só uma parte de um conjunto: a parte vira peça vendida, o conjunto fica com o resto."""
+    try:
+        return pecas.dividir(peca_id, payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/brecho/pecas/{peca_id}/imagem", dependencies=[Depends(auth)])
@@ -148,6 +164,72 @@ async def set_pecas_drop(drop_id: int, payload: dict):
 async def scraper_importar():
     """Importa a planilha atual do worker pro banco (sem raspar)."""
     return await asyncio.to_thread(scraper.importar)
+
+
+# ── raspagem pelo EMULADOR (conta auxiliar lê o perfil no app; server não loga mais) ──
+@app.post("/scraper/emulador/raspar", dependencies=[Depends(auth)])
+async def scraper_emulador_raspar(payload: dict = None):
+    """O app pede a raspagem no emulador: cria um Run do brechó que ESPELHA a run do backend
+    dos Bots (progresso/log/Live Activity na MESMA tela de Run do app). Devolve o run.info() —
+    mesma forma do /runs — pra tela de Run funcionar sem mudança no app."""
+    run = await mgr.start_emulador(payload or {})
+    return run.info()
+
+
+@app.get("/scraper/emulador/prontidao", dependencies=[Depends(auth)])
+async def scraper_emulador_prontidao():
+    """Proxy pro backend dos Bots: prontidão da raspagem (emulador/PC online + contas auxiliares
+    aptas). O token dos Bots fica no server, nunca no app. Alimenta o painel de prontidão da tela."""
+    return await asyncio.to_thread(scraper.prontidao_emulador)
+
+
+@app.get("/scraper/emulador/alvos", dependencies=[Depends(auth)])
+async def scraper_emulador_alvos():
+    """O device busca aqui no início da run: peças disponíveis (p/ checar venda pelo link) +
+    codes recentes conhecidos (p/ parar os posts novos no 1º já visto). Fora dos params do job."""
+    return await asyncio.to_thread(scraper.alvos_emulador)
+
+
+@app.post("/scraper/emulador/posts", dependencies=[Depends(auth)])
+async def scraper_emulador_posts(payload: dict = None):
+    """O device devolve os posts raspados (code, legenda, taken_at, imagem_b64). Reusa o
+    MESMO parser + reconciliação por code; grava a foto (print) como arquivo local."""
+    payload = payload or {}
+    stats = await asyncio.to_thread(
+        scraper.reconciliar_emulador, payload.get("posts") or [], False)
+    # acumula os eventos/números deste lote por run (p/ o _finalizar_emulador logar peça-a-peça +
+    # "resumo:" no fim, igual à raspagem antiga). run_id = id da run dos Bots que o device ecoa.
+    mgr.acumular_emulador(payload.get("run_id"), stats)
+    return stats
+
+
+# ── job "fotos": recapturar a foto (limpa dos overlays do IG) de TODAS as peças com link ──
+@app.post("/scraper/emulador/fotos/raspar", dependencies=[Depends(auth)])
+async def scraper_emulador_fotos_raspar(payload: dict = None):
+    """Dispara a recaptura de fotos no emulador pelo MESMO espelho da raspagem (progresso/log/LA na
+    tela de Run). Demora (~2h pra ~390 peças) — 409 se já tem uma rodando."""
+    if any(r.bots_id is not None and r.params.get("modo") == "fotos"
+           and r.status in ("rodando", "iniciando") for r in mgr.runs.values()):
+        raise HTTPException(409, "Já tem uma recaptura de fotos rodando — espera terminar.")
+    run = await mgr.start_emulador({"lang": (payload or {}).get("lang") or "pt", "modo": "fotos"})
+    return run.info()
+
+
+@app.get("/scraper/emulador/fotos/alvos", dependencies=[Depends(auth)])
+async def scraper_emulador_fotos_alvos():
+    """O device busca aqui as peças do job "fotos": toda peça com link do post, menos as travadas
+    (so_manual). [{code, num, nome}] — à venda primeiro, mais novas primeiro."""
+    return await asyncio.to_thread(scraper.alvos_fotos_emulador)
+
+
+@app.post("/scraper/emulador/fotos", dependencies=[Depends(auth)])
+async def scraper_emulador_fotos(payload: dict = None):
+    """O device devolve SÓ as fotos recapturadas ({run_id, posts:[{code, imagem_b64}]}). Grava igual
+    à raspagem (scraper-<code>.jpg, pula peça travada) sem tocar em nenhum outro dado da peça."""
+    payload = payload or {}
+    stats = await asyncio.to_thread(scraper.salvar_fotos_emulador, payload.get("posts") or [])
+    mgr.acumular_emulador(payload.get("run_id"), stats)   # resumo no fim da run espelhada
+    return stats
 
 
 @app.post("/runs", dependencies=[Depends(auth)])

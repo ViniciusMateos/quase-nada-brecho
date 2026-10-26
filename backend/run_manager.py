@@ -50,6 +50,34 @@ def _parse_saldo(linha):
     return d or None
 
 
+def _extrair_saldo_bots(data):
+    """Best-effort: tira um saldo ({novas, atualizadas, …}) do dict da run do backend dos Bots.
+    A reconciliação de verdade (novas/atualizadas/vendidas) acontece no POST /scraper/emulador/posts
+    que o device faz, então aqui normalmente NÃO vem nada — devolve None sem quebrar. Tenta, nesta
+    ordem: (1) um campo `saldo` já dict; (2) um marcador `[saldo] k=v …` no status_log (que pode
+    ser lista de strings ou de dicts com o texto num dos campos conhecidos)."""
+    if not isinstance(data, dict):
+        return None
+    s = data.get("saldo")
+    if isinstance(s, dict) and s:
+        return {k: v for k, v in s.items() if isinstance(v, (int, float, str))} or None
+    log = data.get("status_log")
+    linhas = []
+    if isinstance(log, list):
+        for item in log:
+            if isinstance(item, str):
+                linhas.append(item)
+            elif isinstance(item, dict):
+                linhas.append(str(item.get("linha") or item.get("msg") or item.get("texto") or ""))
+    elif isinstance(log, str):
+        linhas = log.splitlines()
+    for linha in reversed(linhas):
+        achado = _parse_saldo(linha)
+        if achado:
+            return achado
+    return None
+
+
 _TEXTOS = {
     "raspagem": {
         "pt": {
@@ -67,6 +95,25 @@ _TEXTOS = {
             "fim_erro": ("Something went wrong", "The thrift scraper stopped with an error."),
             "fim_sem_sessao": ("No session", "The Instagram session expired — reconnect in the app to scrape."),
             "fim_parado": ("Stopped", "The thrift scraper was stopped."),
+        },
+    },
+    # job "fotos" do emulador: recaptura a foto (limpa) de todas as peças com link
+    "fotos": {
+        "pt": {
+            "titulo": "Recapturando fotos",
+            "inicio": ("Recapturando fotos", "Abrindo peça por peça pra tirar a foto de novo… demora umas horas."),
+            "fim_ok": ("Fotos atualizadas", "Recaptura das fotos concluída."),
+            "fim_erro": ("Deu ruim", "A recaptura das fotos parou com erro."),
+            "fim_sem_sessao": ("Sem sessão", "A conta auxiliar caiu — confira as contas no app dos Bots."),
+            "fim_parado": ("Parado", "A recaptura das fotos foi parada."),
+        },
+        "en": {
+            "titulo": "Recapturing photos",
+            "inicio": ("Recapturing photos", "Opening each item to take the photo again… takes a few hours."),
+            "fim_ok": ("Photos updated", "Photo recapture done."),
+            "fim_erro": ("Something went wrong", "The photo recapture stopped with an error."),
+            "fim_sem_sessao": ("No session", "The helper account dropped — check the accounts in the Bots app."),
+            "fim_parado": ("Stopped", "The photo recapture was stopped."),
         },
     },
     "conectar": {
@@ -94,7 +141,8 @@ def _proc_info(params, lang="pt"):
     """Textos de exibição por TIPO de processo (raspagem x conectar Instagram) e IDIOMA.
     O app manda o idioma selecionado em params['lang'] (pt/en); usado no título da Live
     Activity / footer e nas notificações começou/terminou/parou."""
-    tipo = "conectar" if (params or {}).get("import_cookies") else "raspagem"
+    p = params or {}
+    tipo = "conectar" if p.get("import_cookies") else ("fotos" if p.get("modo") == "fotos" else "raspagem")
     idioma = lang if lang in ("pt", "en") else "pt"
     return _TEXTOS[tipo][idioma]
 
@@ -116,6 +164,8 @@ class Run:
         self.proc = None
         self._ult_push_pct = -100      # throttle dos pushes de progresso
         self._ult_push_t = 0.0
+        self.bots_id = None            # id da run no backend dos Bots (só raspagem via emulador)
+        self._pump_task = None         # task do _pump_emulador (pra cancelar no stop imediato)
         self.la_token = None           # push token da Live Activity (o app manda)
         self.la_bundle = None          # bundle do BUILD que criou a LA (.dev/.preview) — vira o tópico do APNs
         self._ult_la_pct = -100        # throttle (leve) dos updates da Live Activity
@@ -145,6 +195,24 @@ class Run:
 class RunManager:
     def __init__(self):
         self.runs = {}
+        # acumula o stats (eventos peça-a-peça + números) de cada lote do POST /scraper/emulador/posts,
+        # por run dos Bots (run_id que o device manda). Consumido no _finalizar_emulador pra logar o
+        # peça-a-peça + "resumo:" igual à raspagem antiga. {bots_run_id: {eventos:[...], novas, ...}}
+        self._emu_stats = {}
+
+    def acumular_emulador(self, bots_run_id, stats):
+        """Soma os números e concatena os `eventos` de cada lote que o device envia (são ~7 lotes
+        por raspagem). Chamado pelo handler do POST /scraper/emulador/posts."""
+        if not bots_run_id or not isinstance(stats, dict):
+            return
+        acc = self._emu_stats.setdefault(str(bots_run_id), {"eventos": []})
+        for k, v in stats.items():
+            if k == "eventos":
+                acc["eventos"].extend(v or [])
+            elif isinstance(v, bool):
+                acc.setdefault(k, v)
+            elif isinstance(v, (int, float)):
+                acc[k] = acc.get(k, 0) + v
 
     async def start(self, params):
         run = Run(params)
@@ -241,6 +309,185 @@ class RunManager:
         self._gravar_historico(run)
         await self._push_fim(run)
         for q in list(run.subs):       # sinaliza fim (None) aos assinantes
+            try:
+                q.put_nowait(None)
+            except Exception:
+                pass
+
+    # ───────────── raspagem pelo EMULADOR (espelha a run do backend dos Bots) ─────────────
+    async def start_emulador(self, params):
+        """Dispara a raspagem no EMULADOR (via backend dos Bots) e cria um Run do brechó que
+        ESPELHA a run remota. Assim a tela de Run do app (WS /runs/{id}/logs + GET /runs/{id})
+        funciona IGUAL à raspagem antiga do Playwright, sem mudança no app. Devolve o Run."""
+        p = params or {}
+        run = Run(p)                    # mesma classe/forma do self.start; titulo = "Raspando o brechó"
+        #                                 (ou "Recapturando fotos" no modo fotos)
+        self.runs[run.id] = run
+        try:
+            resp = await asyncio.to_thread(
+                scraper.enfileirar_raspagem_emulador, bool(p.get("full")), p.get("lang") or "pt",
+                p.get("modo"))
+            bots_id = resp["id"]
+        except Exception as e:
+            run.status = "erro"
+            run.ended_at = time.time()
+            await run.emitir(f"[backend] não consegui iniciar a raspagem no emulador: {e}")
+            self._gravar_historico(run)
+            return run
+        run.status = "rodando"
+        run.bots_id = bots_id          # guarda pra o stop poder parar a run de verdade nos Bots
+        await run.emitir("─── Preparação ───")
+        run._pump_task = asyncio.create_task(self._pump_emulador(run, bots_id))
+        asyncio.create_task(self._push_inicio(run))
+        return run
+
+    async def _pump_emulador(self, run, bots_id):
+        """Faz polling do GET /runs/{bots_id} do backend dos Bots e reflete no Run do brechó:
+        barra de progresso (run.progress + Live Activity) e TODAS as linhas novas do log do módulo
+        (WS). Quando a run remota termina, fecha o Run igual ao fim do _pump (notificação,
+        histórico e sinal de fim pros assinantes). Teto de ~45 min pra não acompanhar pra sempre
+        (o job "fotos" passa pelo brechó INTEIRO, ~2h pra ~390 peças → teto de 6h)."""
+        TERMINAIS = {"finalizado", "erro", "parado", "sem_sessao"}
+        teto_min = 6 * 60 if run.params.get("modo") == "fotos" else 45
+        deadline = time.time() + teto_min * 60
+        cauda = []                      # últimas linhas do log dos Bots já repassadas (acha onde parei)
+        try:
+            while time.time() < deadline:
+                await asyncio.sleep(3)
+                try:
+                    data = await asyncio.to_thread(scraper.obter_run_bots, bots_id)
+                except Exception:
+                    continue            # rede/timeout pontual → tenta de novo no próximo ciclo
+                if not isinstance(data, dict):
+                    continue
+
+                p = data.get("progress") or {}
+                if p.get("total"):
+                    run.progress = {"done": int(p.get("done") or 0), "total": int(p["total"]),
+                                    "label": p.get("label") or ""}
+                    await self._maybe_push_progresso(run)      # atualiza a Live Activity
+
+                # repassa as linhas NOVAS do log (conta escolhida, alvos, fallback de conta, peça a
+                # peça, avisos). Antes só ia o progresso e a tela do app ficava muda.
+                cauda = await self._repassar_log_bots(run, data, cauda)
+
+                status = data.get("status")
+                if status in TERMINAIS:
+                    run.status = status
+                    saldo = _extrair_saldo_bots(data)          # best-effort (quase sempre vazio)
+                    if saldo:
+                        run.saldo = saldo
+                    await self._finalizar_emulador(run, bots_id)
+                    return
+        except Exception as e:
+            await run.emitir(f"[backend] erro acompanhando a raspagem no emulador: {e}")
+
+        # saiu do laço sem a run remota terminar (teto de tempo / exceção) → fecha mesmo assim
+        if run.ended_at is None:
+            if run.status not in TERMINAIS:
+                run.status = "erro"
+            await run.emitir("[backend] parei de acompanhar a raspagem (tempo limite).")
+            await self._finalizar_emulador(run, bots_id)
+
+    _CAUDA = 25                         # quantas linhas já repassadas guardo pra achar onde parei
+
+    @staticmethod
+    def _txt_linha(item):
+        if isinstance(item, dict):
+            item = item.get("linha") or item.get("msg") or item.get("texto") or ""
+        return str(item or "").rstrip()
+
+    async def _repassar_log_bots(self, run, data, cauda):
+        """Repassa pro Run do brechó as linhas do log da run dos Bots que ainda não foram.
+        O GET dos Bots manda `log` = cabeçalho (30 1ªs linhas, fixas) + as últimas 300 do resto, e
+        `linhas` = tamanho do buffer (TRAVA em 3000) — então índice não serve. Acha onde parei pelo
+        CONTEÚDO: procura a sequência das últimas linhas já repassadas (`cauda`) na parte contínua do
+        log e repassa só o que vem depois. `[progress]` vira 2 linhas: a crua (o app usa pra barra e
+        não lista) + "label done/total" (aparece no log). Marcadores internos ([saldo], [conta], "===")
+        ficam de fora. Devolve a nova cauda."""
+        log = data.get("log")
+        if not isinstance(log, list):
+            return cauda
+        txt = [self._txt_linha(x) for x in log]
+        linhas = data.get("linhas")
+        partido = isinstance(linhas, int) and linhas > len(txt) and len(txt) > 30
+        stream = txt[30:] if partido else txt   # log partido: só a parte depois do cabeçalho é contínua
+        if not cauda:
+            novas = txt                          # 1º poll com conteúdo: o log ainda é a run inteira
+        else:
+            novas = stream                       # não achou onde parei (>300 linhas num poll): manda a cauda
+            k = min(len(cauda), len(stream))
+            bloco = cauda[-k:] if k else []
+            if bloco:
+                fim = next((i for i in range(len(stream) - k, -1, -1) if stream[i:i + k] == bloco), None)
+                if fim is not None:
+                    novas = stream[fim + k:]
+        for s in novas:
+            if not s:
+                continue
+            if s.startswith("[progress]"):
+                pr = _parse_progress(s)
+                if pr:
+                    await run.emitir(s)
+                    await run.emitir(f"{pr['label']} {pr['done']}/{pr['total']}".strip())
+                continue
+            if s.startswith(("[saldo]", "[conta]")) or s.lstrip().startswith("==="):
+                continue
+            # linhas do agente dos Bots: as de início/fim do job repetem as nossas → fora; as de
+            # conta viram "rótulo ··· valor" (o app desenha alinhado, em vez do texto corrido)
+            if s.startswith(("[backend] job enfileirado", "[backend] job do emulador terminou")):
+                continue
+            for pref, rot in (("contas auxiliares na vez:", "Contas na vez"),
+                              ("contas que falharam antes:", "Contas que falharam")):
+                if s.lower().startswith(pref):
+                    s = f"{rot} ··· {s[len(pref):].strip()}"
+                    break
+            if s.startswith("[espera]"):
+                s = "aguardando: " + s[len("[espera]"):].strip()
+            await run.emitir(s)
+        return (list(cauda) + list(novas))[-self._CAUDA:]
+
+    async def _finalizar_emulador(self, run, bots_id=None):
+        """Fecha o Run espelhado igual ao fim do _pump: LOGA o peça-a-peça + 'resumo:' (igual à
+        raspagem antiga), marca o término, grava no histórico, notifica o celular (push + encerra a
+        Live Activity) e sinaliza (None) os assinantes do WS pra encerrarem a conexão. Idempotente:
+        se já fechou (ended_at setado), não faz nada."""
+        if run.ended_at is not None:
+            return
+        run.ended_at = time.time()
+        # peça-a-peça + resumo: o POST /scraper/emulador/posts acumulou os eventos/números de cada
+        # lote por run_id dos Bots. Emite o que foi processado (inclusive se foi PARADO no meio).
+        st = self._emu_stats.pop(str(bots_id), None) if bots_id else None
+        fotos = run.params.get("modo") == "fotos"
+        if st and fotos and run.status in ("finalizado", "parado"):
+            # job "fotos": só imagens — resumo próprio (o POST /scraper/emulador/fotos acumulou)
+            await run.emitir("─── Resumo ───")
+            await run.emitir(f"Fotos salvas ··· {st.get('imagens', 0)}")
+            for rot, k in (("Travadas (puladas)", "travadas"), ("Sem peça no app", "sem_peca"),
+                           ("Inválidas", "invalidas")):
+                if st.get(k):
+                    await run.emitir(f"{rot} ··· {st[k]}")
+            run.saldo = {"imagens": st.get("imagens", 0)}
+        elif st and run.status in ("finalizado", "parado"):
+            # as linhas peça a peça ("O que mudou") o próprio módulo já loga e chegam pelo repasse —
+            # aqui só o resumo, em "rótulo ··· valor"
+            await run.emitir("─── Resumo ───")
+            for rot, k in (("Novas", "novas"), ("Relacionadas", "reconciliadas"),
+                           ("Atualizadas", "atualizadas"), ("Venderam", "recem_vendidas"),
+                           ("Sem mudança", "conferidas")):
+                await run.emitir(f"{rot} ··· {st.get(k, 0)}")
+            if st.get("a_conferir"):
+                await run.emitir(f"Conferir na mão ··· {st['a_conferir']} (peça travada com post dizendo vendido)")
+            run.saldo = {"novas": st.get("novas", 0), "atualizadas": st.get("atualizadas", 0),
+                         "reconciliadas": st.get("reconciliadas", 0),
+                         "recem_vendidas": st.get("recem_vendidas", 0),
+                         "conferidas": st.get("conferidas", 0)}
+        fim = {"finalizado": "concluída", "parado": "parada", "erro": "com erro",
+               "sem_sessao": "sem sessão"}.get(run.status, run.status)
+        await run.emitir(f"[backend] {'recaptura das fotos' if fotos else 'raspagem'} {fim}.")
+        self._gravar_historico(run)
+        await self._push_fim(run)
+        for q in list(run.subs):
             try:
                 q.put_nowait(None)
             except Exception:
@@ -346,12 +593,35 @@ class RunManager:
 
     async def stop(self, run_id):
         run = self.runs.get(run_id)
-        if not run or not run.proc:
+        if not run:
+            return False
+        # raspagem no EMULADOR (sem subprocesso): para IMEDIATO do lado do app — marca parado, fecha
+        # a run (push/histórico/WS) e cancela o acompanhamento; em PARALELO pede o stop no backend dos
+        # Bots (a run de verdade no device), sem travar a resposta esperando a rede.
+        if run.bots_id is not None:
+            if run.ended_at is not None:
+                return True            # já fechou
+            if run.status in ("rodando", "iniciando"):
+                run.status = "parado"
+            if run._pump_task:
+                run._pump_task.cancel()   # para de espelhar (não re-finaliza)
+            asyncio.create_task(self._parar_bots_async(run, run.bots_id))
+            await self._finalizar_emulador(run, run.bots_id)
+            return True
+        # raspagem antiga (Playwright): mata o subprocesso (árvore xvfb→python→chromium→Xvfb)
+        if not run.proc:
             return False
         if run.proc.returncode is None:
             run.status = "parado"
             self._parar_gracioso(run.proc)
         return True
+
+    async def _parar_bots_async(self, run, bots_id):
+        """Pede o stop no backend dos Bots sem travar a resposta do /stop (a run do app já fechou)."""
+        try:
+            await asyncio.to_thread(scraper.parar_run_bots, bots_id)
+        except Exception as e:
+            await run.emitir(f"[backend] aviso: não confirmei o stop no emulador ({e}).")
 
     def _parar_gracioso(self, proc):
         """Manda SIGINT (= Ctrl+C) pro worker cair no `except KeyboardInterrupt` e sair LIMPO
