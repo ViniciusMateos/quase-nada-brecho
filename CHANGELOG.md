@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.10.0] — 2026-10-26
+
+### Adicionado
+- feat: **raspagem pelo emulador com conta auxiliar** — a raspagem saiu do Playwright no servidor (a conta da loja tomou desafio por logar de IP de datacenter) e roda num emulador Android: o app pede, o backend enfileira um job no backend dos Bots, o agente do PC escolhe uma conta auxiliar apta (com fallback se uma falhar) e o device devolve os posts. A **conta da loja nunca é usada**. Duas partes: peças novas no topo do feed + conferência de cada peça à venda pelo link do post (vendido e preço — o Insta ganha nas disponíveis).
+- feat: **histórico por peça** — no editor, a linha do tempo do que aconteceu com a peça (criada, nova do Insta, preço mudou, vendida, dividida, conferir venda), com as vendas antigas já registradas.
+- feat: **dividir conjunto** — vendeu só uma parte? A parte vira uma peça nova vendida (mesmo drop, data e foto) e o conjunto fica com o preço/custo que sobrou, à venda e com o link. Dashboard, calendário e drops contam certo sozinhos.
+- feat: **painel de prontidão** na tela Raspar Instagram — emulador online/offline, contas auxiliares (apta / descansando até HH:MM / bloqueada) e a próxima da vez, no lugar do cartão da sessão antiga do servidor.
+- feat: **log da run organizado** — seções (Preparação, Peças novas, Conferindo, O que mudou, Resumo), linhas "rótulo ··· valor", status colorido no começo de cada peça e a linha ao vivo com o preço antigo → novo. A raspagem manda em **lotes de 10** (o app se atualiza durante a run e uma queda não perde o que já foi conferido) e o **parar é imediato**.
+- feat: **print da foto limpo** (sem a bolha de repost, o contador "1/3" e a borda do card) e **recaptura de fotos** (modo `fotos`) — rodou 394/394: as vendidas antigas, que estavam sem foto porque usavam o link de imagem do Insta (expira), voltaram a ter foto salva no servidor.
+
+### Corrigido
+- fix: **drop fantasma** ("Drop 35" com 39 peças que não abria nem apagava) — a raspagem apagava a data e a foto da peça quando o post vinha sem elas. Não apaga mais, e as datas perdidas foram recuperadas pelo próprio código do post.
+- fix: **post sem link** casa pela `#p` e marca a venda (antes era descartado); peça postada sem link é caçada no feed até o drop dela.
+- fix: **peça travada** passa a guardar o link do post (antes era ignorada inteira) e, em vez de marcar vendida, avisa **CONFERIR** — conjunto pode vender só uma das peças.
+- fix: **foto nova aparece no app** — a URL da foto leva `?v=<data do arquivo>`, então o cache do app não mostra mais a versão velha.
+
+### Documentação
+- docs: README descreve a raspagem pelo emulador, o histórico da peça, o dividir conjunto e a recaptura de fotos.
+
+### Notas
+- Frontend por **OTA #56 a #65** (`runtimeVersion` segue `1.0.0`). Backend por `scp`. A parte do device mora na stack `quase-nada-bots-device` (módulo `bots/brecho_scraper`, ainda sem repo próprio).
+
 ## [1.9.0] — 2026-10-21
 
 ### Adicionado
