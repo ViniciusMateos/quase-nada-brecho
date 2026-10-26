@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { api, DropResumo, Peca, PecaCampos } from '@/lib/api';
+import { api, DropResumo, EventoPeca, Peca, PecaCampos } from '@/lib/api';
 import { baseUrl } from '@/lib/apiClient';
 import { fotoParaUpload } from '@/lib/foto';
 import { useI18n } from '@/i18n';
@@ -103,6 +103,23 @@ function paraForm(p: Peca): Form {
   };
 }
 
+// Campos que vão pro backend ao salvar (usado pelo Salvar e pelo Dividir, que salva antes de dividir).
+function camposDoForm(form: Form): PecaCampos {
+  return {
+    nome: form.nome.trim(), item: form.item.trim(), tamanho: form.tamanho.trim(),
+    largura: form.largura.trim(), comprimento: form.comprimento.trim(),
+    medida: serializeMedidas(form.medidas), observacao: form.observacao.trim(),
+    condicao: form.condicao.trim(), compra: num(form.compra), venda: num(form.venda),
+    vendida: form.vendida, drop_id: form.drop_id,
+    vendida_em: form.vendida ? (form.vendidaEm || null) : null,
+    venda_estimada: form.vendaEstimada,
+    consignado: form.consignado, consig_tipo: form.consigTipo,
+    consig_pct: form.consignado && form.consigTipo === 'pct' ? num(form.consigPct) : null,
+    consig_valor: form.consignado && form.consigTipo === 'valor' ? num(form.consigValor) : null,
+    so_manual: form.soManual, template: form.template.trim() || null,
+  };
+}
+
 // Gera o template da legenda pra copiar/colar no post (mesmo formato do brechó).
 function gerarTemplate(f: Form): string {
   const L: string[] = [];
@@ -157,8 +174,11 @@ export function EditorPeca({
   const nav = useNavigation<Nav>();
   const [form, setForm] = useState<Form | null>(null);
   const [drops, setDrops] = useState<DropResumo[]>([]);
+  const [historico, setHistorico] = useState<EventoPeca[] | null>(null);
   const [base, setBase] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [dividir, setDividir] = useState<{ nome: string; venda: string; data: string } | null>(null);
+  const [dividindo, setDividindo] = useState(false);
   const [mostrarMedida, setMostrarMedida] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -185,8 +205,12 @@ export function EditorPeca({
     if (visible) {
       const f = peca ? paraForm(peca) : { ...FORM_VAZIO };
       setForm(f);
+      setDividir(null);
       setMostrarMedida(f.medidas.length > 0);
       api.listDropsTodos().then((r) => setDrops(r.drops)).catch(() => {});
+      // histórico da peça (o que aconteceu com ela) — só pra peça já existente
+      setHistorico(null);
+      if (peca?.id) api.pecaHistorico(peca.id).then((r) => setHistorico(r.eventos)).catch(() => setHistorico([]));
     }
   }, [visible, peca]);
 
@@ -227,19 +251,7 @@ export function EditorPeca({
 
   async function salvar() {
     if (!form) return;
-    const campos: PecaCampos = {
-      nome: form.nome.trim(), item: form.item.trim(), tamanho: form.tamanho.trim(),
-      largura: form.largura.trim(), comprimento: form.comprimento.trim(),
-      medida: serializeMedidas(form.medidas), observacao: form.observacao.trim(),
-      condicao: form.condicao.trim(), compra: num(form.compra), venda: num(form.venda),
-      vendida: form.vendida, drop_id: form.drop_id,
-      vendida_em: form.vendida ? (form.vendidaEm || null) : null,
-      venda_estimada: form.vendaEstimada,
-      consignado: form.consignado, consig_tipo: form.consigTipo,
-      consig_pct: form.consignado && form.consigTipo === 'pct' ? num(form.consigPct) : null,
-      consig_valor: form.consignado && form.consigTipo === 'valor' ? num(form.consigValor) : null,
-      so_manual: form.soManual, template: form.template.trim() || null,
-    };
+    const campos = camposDoForm(form);
     setSalvando(true);
     try {
       const p = form.id ? await api.editPeca(form.id, campos) : await api.addPeca(campos);
@@ -251,6 +263,26 @@ export function EditorPeca({
       Alert.alert(t('editor.oops'), t('editor.saveFailed'));
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // "Dividir conjunto": salva o que estava editando, separa a parte vendida numa peça nova e fecha
+  async function fazerDivisao() {
+    if (!form?.id || !dividir) return;
+    const parte = num(dividir.venda);
+    if (!dividir.nome.trim() || parte <= 0 || parte >= num(form.venda)) return;
+    setDividindo(true);
+    try {
+      await api.editPeca(form.id, camposDoForm(form));
+      if (form.fotoLocal && !/^https?:/.test(form.fotoLocal)) {
+        await api.uploadImagem(form.id, await fotoParaUpload(form.fotoLocal));
+      }
+      await api.dividirPeca(form.id, { nome: dividir.nome.trim(), venda: parte, vendida_em: dividir.data || hojeISO() });
+      onClose(); onSaved();
+    } catch {
+      Alert.alert(t('editor.oops'), t('editor.splitFail'));
+    } finally {
+      setDividindo(false);
     }
   }
 
@@ -491,6 +523,42 @@ export function EditorPeca({
               ) : null}
             </View>
           )}
+          {/* vendeu só UMA parte de um conjunto: a parte vira peça vendida, o conjunto fica com o resto.
+              Quadro DENTRO do editor (não outra sheet/modal por cima — dois modais crasham no iOS). */}
+          {form.id && !form.vendida && num(form.venda) > 0 ? (
+            dividir ? (
+              <View style={styles.templateBox}>
+                <Text style={styles.boolSub}>{t('editor.splitHint')}</Text>
+                <Campo label={t('editor.splitName')} valor={dividir.nome} placeholder={t('editor.splitNamePh')}
+                  onChange={(v) => setDividir({ ...dividir, nome: v })} />
+                <Campo label={t('editor.splitPrice')} valor={dividir.venda} numerico placeholder="0"
+                  onChange={(v) => setDividir({ ...dividir, venda: v.replace(/[^\d.,]/g, '') })} />
+                <CampoData label={t('editor.soldOn')} valor={dividir.data}
+                  onChange={(v) => setDividir({ ...dividir, data: v })} />
+                {(() => {
+                  const parte = num(dividir.venda);
+                  const total = num(form.venda);
+                  if (parte <= 0) return null;
+                  const ok = parte < total;
+                  return (
+                    <Text style={[styles.consigPreview, !ok && { color: colors.erro }]}>
+                      {ok ? t('editor.splitPreview', { resto: brl(total - parte) }) : t('editor.splitErr', { total: brl(total) })}
+                    </Text>
+                  );
+                })()}
+                <Botao title={t('editor.splitDo')} onPress={fazerDivisao} loading={dividindo}
+                  disabled={dividindo || !dividir.nome.trim() || num(dividir.venda) <= 0 || num(dividir.venda) >= num(form.venda)} />
+                <Botao title={t('editor.cancel')} cor={colors.card} txtCor={colors.texto} onPress={() => setDividir(null)} />
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.verDrop} activeOpacity={0.8}
+                onPress={() => setDividir({ nome: '', venda: '', data: hojeISO() })}>
+                <Ionicons name="git-branch-outline" size={16} color={colors.marca} />
+                <Text style={styles.verDropTxt}>{t('editor.split')}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.marca} />
+              </TouchableOpacity>
+            )
+          ) : null}
 
           <View style={styles.linhaBool}>
             <Text style={styles.boolLabel}>{t('editor.consignment')}</Text>
@@ -583,6 +651,39 @@ export function EditorPeca({
             );
           })()}
 
+          {form.id ? (
+            <>
+              <Secao icon="time-outline" titulo={t('editor.secHistory')} styles={styles} colors={colors} />
+              {historico === null ? null : historico.length === 0 ? (
+                <Text style={styles.histVazio}>{t('editor.historyEmpty')}</Text>
+              ) : (
+                <View style={styles.histLista}>
+                  {historico.map((ev) => {
+                    const vis = evVisual(ev.tipo);
+                    const cor = vis.cor === 'ok' ? colors.ok : vis.cor === 'marca' ? colors.marca
+                      : vis.cor === 'alerta' ? colors.alerta : colors.textoFraco;
+                    const lbl = ev.tipo ? t(`editor.ev${ev.tipo}` as any) : '';
+                    return (
+                      <View key={ev.id} style={styles.histItem}>
+                        <View style={styles.histIcone}>
+                          <Ionicons name={vis.icon} size={15} color={cor} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.histTopo}>
+                            <Text style={[styles.histTipo, { color: cor }]}>{lbl && !lbl.startsWith('editor.') ? lbl : ev.tipo}</Text>
+                            <Text style={styles.histData}>{fmtDataEvento(ev.criado_em)}</Text>
+                          </View>
+                          {ev.texto ? <Text style={styles.histTexto}>{ev.texto}</Text> : null}
+                          <Text style={styles.histOrigem}>{origemLabel(ev.origem, t)}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          ) : null}
+
           {form.code && (
             <Botao title={t('editor.openInstagram')} cor={colors.card2} txtCor={colors.marca}
               onPress={() => Linking.openURL(`https://www.instagram.com/p/${form.code}/`)} />
@@ -597,6 +698,31 @@ export function EditorPeca({
 function brl(n: number) {
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
   return `R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${dec}`;
+}
+
+// ícone + cor de cada tipo de evento do histórico da peça
+function evVisual(tipo: string | null): { icon: React.ComponentProps<typeof Ionicons>['name']; cor: 'ok' | 'marca' | 'alerta' | 'fraco' } {
+  switch (tipo) {
+    case 'VENDIDA': return { icon: 'checkmark-done', cor: 'ok' };
+    case 'DESMARCADA': return { icon: 'arrow-undo', cor: 'fraco' };
+    case 'CONFERIR': return { icon: 'alert-circle-outline', cor: 'alerta' };
+    case 'DIVIDIDA': return { icon: 'git-branch-outline', cor: 'marca' };
+    case 'ATUALIZADA': return { icon: 'sync', cor: 'marca' };
+    case 'RELACIONADA': return { icon: 'link', cor: 'marca' };
+    case 'NOVA': return { icon: 'sparkles', cor: 'marca' };
+    case 'CRIADA': return { icon: 'add-circle-outline', cor: 'fraco' };
+    default: return { icon: 'ellipse-outline', cor: 'fraco' };
+  }
+}
+// 'YYYY-MM-DD HH:MM:SS' → 'DD/MM/AAAA' (só a data; é o que importa no histórico)
+function fmtDataEvento(s: string): string {
+  const d = (s || '').slice(0, 10).split('-');
+  return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : s;
+}
+function origemLabel(origem: string, t: (k: string) => string): string {
+  if (origem === 'manual') return t('editor.evManual');
+  if (origem === 'histórico') return t('editor.evHist');
+  return t('editor.evScraper');
 }
 
 function Campo({ label, valor, onChange, numerico, multiline, placeholder, style }:
@@ -724,4 +850,13 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   cmTxt: { color: colors.textoFraco, fontSize: 13 },
   addMedida: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: colors.marca, borderStyle: 'dashed' },
   addMedidaTxt: { color: colors.marca, fontSize: 13, fontWeight: '700' },
+  histVazio: { color: colors.textoFraco, fontSize: 13, fontStyle: 'italic', marginLeft: 2 },
+  histLista: { gap: 8 },
+  histItem: { flexDirection: 'row', gap: 10, backgroundColor: colors.card, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  histIcone: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.card2, alignItems: 'center', justifyContent: 'center' },
+  histTopo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  histTipo: { fontSize: 14, fontWeight: '800' },
+  histData: { color: colors.textoFraco, fontSize: 11 },
+  histTexto: { color: colors.texto, fontSize: 13, marginTop: 2, lineHeight: 18 },
+  histOrigem: { color: colors.textoFraco, fontSize: 10, marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.3 },
 });

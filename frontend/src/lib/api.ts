@@ -33,6 +33,32 @@ export type Peca = {
   vendida_em: string | null;      // data da venda (YYYY-MM-DD) — pro calendário
   venda_estimada: boolean;        // data chutada (backfill/scraper) → pede confirmação
 };
+// histórico da peça: o que aconteceu com ela (vendida, preço mudou, nova…)
+export type EventoPeca = {
+  id: number;
+  criado_em: string;           // 'YYYY-MM-DD HH:MM:SS' (UTC do SQLite)
+  tipo: string | null;         // VENDIDA | ATUALIZADA | RELACIONADA | NOVA | CRIADA | DESMARCADA
+  texto: string | null;        // mudanças ('preço R$20 → R$25'); pode ser vazio
+  origem: string;              // scraper | manual | histórico
+};
+// prontidão da raspagem pelo emulador (painel "tá pronto pra rodar?")
+export type ContaProntidao = {
+  conta: string;
+  estado: 'apta' | 'descansando' | 'bloqueada';
+  motivo: string | null;
+  ate?: number;                 // epoch (só quando descansando)
+  ultima_raspagem: number | null;
+};
+export type Prontidao = {
+  pronto: boolean;
+  resumo: string;
+  agente_online: boolean;
+  ultimo_ping_ha_s: number;
+  emulador_ocupado: boolean;
+  proxima: string | null;
+  contas: ContaProntidao[];
+  erro?: boolean;               // true = o backend do brechó não falou com os Bots
+};
 export type PecaCampos = Partial<Pick<Peca,
   'nome' | 'item' | 'tamanho' | 'largura' | 'comprimento' | 'medida' | 'observacao' | 'condicao' | 'compra' | 'venda' | 'vendida' | 'drop_id' | 'consignado' | 'consig_pct' | 'consig_tipo' | 'consig_valor' | 'so_manual' | 'template' | 'vendida_em' | 'venda_estimada'>>;
 
@@ -117,6 +143,11 @@ export const api = {
   editPeca: (id: number, campos: PecaCampos) => http.put<Peca>(`/brecho/pecas/${id}`, campos),
   delPeca: (id: number) => http.del(`/brecho/pecas/${id}`),
   uploadImagem: (id: number, form: FormData) => http.upload<Peca>(`/brecho/pecas/${id}/imagem`, form),
+  pecaHistorico: (id: number) => http.get<{ eventos: EventoPeca[] }>(`/brecho/pecas/${id}/historico`),
+  // vendeu só uma parte de um conjunto: a parte vira peça vendida, o conjunto fica com o resto
+  dividirPeca: (id: number, campos: { nome: string; venda: number; vendida_em?: string }) =>
+    http.post<{ original: Peca; parte: Peca }>(`/brecho/pecas/${id}/dividir`, campos),
+  prontidaoEmulador: () => http.get<Prontidao>('/scraper/emulador/prontidao'),
 
   // drops
   listDrops: () => http.get<{ drops: Drop[] }>('/drops'),
@@ -130,6 +161,7 @@ export const api = {
 
   // scraper / runs — manda o idioma do app pras notificações saírem em PT/EN
   startRun: (params: Record<string, unknown>) => http.post<RunInfo>('/runs', { ...params, lang: getLang() }),
+  rasparEmulador: (params: Record<string, unknown>) => http.post<RunInfo>('/scraper/emulador/raspar', { ...params, lang: getLang() }),
   listRuns: () => http.get<RunInfo[]>('/runs'),
   getRunsHistorico: () => http.get<RunHistorico[]>('/runs/history'),
   getRun: (id: string) => http.get<RunDetail>(`/runs/${id}`),

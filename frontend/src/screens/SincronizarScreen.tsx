@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, IgStatus, RunInfo } from '@/lib/api';
-import { lerCredenciais } from '@/lib/credenciais';
+import { api, ContaProntidao, Prontidao, RunInfo } from '@/lib/api';
 import { useTheme } from '@/theme-context';
 import { useI18n } from '@/i18n';
 import { type Cores, statusCor } from '@/theme';
@@ -16,7 +15,19 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const STATUS_RUN = ['iniciando', 'rodando', 'finalizado', 'parado', 'erro', 'sem_sessao'];
-const CACHE_CHECK_MS = 180_000;   // não re-verifica a sessão ao vivo se já checou faz < 3 min
+
+// epoch (s) → 'HH:MM' local; '' se inválido
+function horaDe(epoch?: number): string {
+  if (!epoch) return '';
+  try {
+    return new Date(epoch * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+// segundos → '30s' / '2min' (desde o último ping do agente)
+function haQuanto(s: number): string {
+  if (s == null || s < 0) return '';
+  return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}min`;
+}
 
 export function SincronizarScreen() {
   const { colors } = useTheme();
@@ -27,60 +38,36 @@ export function SincronizarScreen() {
   const insets = useSafeAreaInsets();
   const [runs, setRuns] = useState<RunInfo[]>([]);
   const [iniciando, setIniciando] = useState(false);
-
-  // ── estado da sessão do Instagram (cartão "dá pra rodar?") ──
-  const [igSt, setIgSt] = useState<IgStatus | null>(null);
-  const [contaLocal, setContaLocal] = useState<string | null>(null);   // fallback: conta salva no aparelho
-  const [check, setCheck] = useState<'idle' | 'ok' | 'sem_sessao' | 'erro'>('idle');
-  const [verificando, setVerificando] = useState(false);
-  const checkedAt = useRef(0);   // quando foi a última verificação ao vivo (cache)
+  const [prontidao, setProntidao] = useState<Prontidao | null>(null);
 
   const carregar = useCallback(() => {
     api.listRuns().then((r) => setRuns(r.slice().reverse())).catch(() => setRuns([]));
   }, []);
-
-  const carregarIg = useCallback(() => {
-    api.igStatus().then(setIgSt).catch(() => setIgSt(null));
-    lerCredenciais().then((cs) => setContaLocal(cs[0]?.usuario ?? null)).catch(() => {});
+  const carregarProntidao = useCallback(() => {
+    api.prontidaoEmulador().then(setProntidao).catch(() => setProntidao(null));
   }, []);
 
-  // enquanto a tela está aberta, atualiza o estado dos runs (pra saber se já tem raspagem rodando)
+  // enquanto a tela está aberta: runs de perto (pra saber se já tem raspagem) e a prontidão
+  // mais devagar (o heartbeat do agente é ~30s).
   useFocusEffect(useCallback(() => {
     carregar();
-    carregarIg();
-    const id = setInterval(carregar, 2500);
-    return () => clearInterval(id);
-  }, [carregar, carregarIg]));
+    carregarProntidao();
+    const idRuns = setInterval(carregar, 2500);
+    const idPront = setInterval(carregarProntidao, 15000);
+    return () => { clearInterval(idRuns); clearInterval(idPront); };
+  }, [carregar, carregarProntidao]));
 
   // já tem uma RASPAGEM rodando? (conectar Instagram não conta) → bloqueia iniciar outra
   const raspando = runs.some(
     (r) => ['rodando', 'iniciando'].includes(r.status) && !r.params?.import_cookies);
 
-  const verificarAoVivo = useCallback(async () => {
-    setVerificando(true);
-    try {
-      const r = await api.igVerificar();
-      setCheck(r.resultado);
-      setIgSt((s) => ({ conectado: r.conectado, usuario: r.usuario ?? s?.usuario ?? null, conectado_em: s?.conectado_em ?? null }));
-    } catch {
-      // 409 (tem raspagem rodando) ou rede — mantém o último resultado conhecido, só não trava
-    } finally {
-      checkedAt.current = Date.now();   // marca o cache mesmo em falha, pra não martelar o server
-      setVerificando(false);
-    }
-  }, []);
-
-  // auto-verifica UMA vez ao abrir (se conectado, cache velho e sem raspagem rolando)
-  useEffect(() => {
-    if (igSt?.conectado && !verificando && !raspando && Date.now() - checkedAt.current > CACHE_CHECK_MS) {
-      verificarAoVivo();
-    }
-  }, [igSt?.conectado, verificando, raspando, verificarAoVivo]);
-
   async function rodar(params: Record<string, unknown>, nome: string) {
     setIniciando(true);
     try {
-      const run = await api.startRun(params);
+      // raspagem roda no EMULADOR (via backend dos Bots), não mais no Playwright do server.
+      // O retorno é um RunInfo do brechó (mesma forma do startRun) que espelha a run do emulador,
+      // então LA + navegação pra tela de Run seguem iguais.
+      const run = await api.rasparEmulador(params);
       await iniciarLAparaRun(run.id, t('sync.la'));
       nav.navigate('Run', { runId: run.id, nome });
     } catch {
@@ -93,20 +80,6 @@ export function SincronizarScreen() {
 
   const ativos = runs.filter((r) => ['rodando', 'iniciando'].includes(r.status));
 
-  // conta a mostrar + pílula de status da sessão
-  const conta = igSt?.usuario ?? contaLocal;
-  // "pendente" = está verificando OU vai verificar já (conectado, ainda sem resultado, sem
-  // raspagem travando) → mostra "verificando…" direto, sem flashar "conectado (não verificado)".
-  const pendente = verificando || (!!igSt?.conectado && check === 'idle' && !raspando);
-  const pill = pendente
-    ? { txt: t('sync.ig.verifying'), cor: colors.textoFraco, pulsa: true }
-    : check === 'ok' ? { txt: t('sync.ig.ok'), cor: colors.ok, pulsa: false }
-    : check === 'sem_sessao' ? { txt: t('sync.ig.dead'), cor: colors.alerta, pulsa: false }
-    : check === 'erro' ? { txt: t('sync.ig.errCheck'), cor: colors.erro, pulsa: false }
-    : igSt?.conectado ? { txt: t('sync.ig.notChecked'), cor: colors.textoFraco, pulsa: false }
-    : { txt: t('sync.ig.dead'), cor: colors.alerta, pulsa: false };
-  const jaTem = !!(igSt?.conectado || conta);
-
   return (
     <ScrollView style={styles.tela} contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 24 }}>
       <Aparece>
@@ -114,39 +87,13 @@ export function SincronizarScreen() {
           <Text style={styles.titulo}>{t('sync.card.title')}</Text>
           <Text style={styles.desc}>{t('sync.card.desc')}</Text>
           <Botao title={raspando ? t('sync.inProgress') : t('sync.update')}
-            onPress={() => rodar({}, t('sync.run.scrape'))} loading={iniciando} disabled={raspando || iniciando || verificando} />
-          <Botao title={t('sync.preview')} cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ dry_run: true }, t('sync.run.preview'))} disabled={raspando || iniciando || verificando} />
-          <Botao title={t('sync.full')} cor={colors.card2} txtCor={colors.texto}
-            onPress={() => rodar({ full: true }, t('sync.full'))} disabled={raspando || iniciando || verificando} />
+            onPress={() => rodar({}, t('sync.run.scrape'))} loading={iniciando} disabled={raspando || iniciando} />
           <Text style={styles.hint}>{t('sync.hint')}</Text>
         </Card>
       </Aparece>
 
       <Aparece delay={40}>
-        <Card style={{ gap: 12 }}>
-          <Text style={styles.titulo}>{t('sync.ig.title')}</Text>
-
-          <View style={styles.igRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.igConta}>{conta ? `@${conta}` : t('sync.ig.noAccount')}</Text>
-              {igSt?.conectado_em ? (
-                <Text style={styles.igSub}>{t('sync.ig.since', { d: igSt.conectado_em })}</Text>
-              ) : null}
-            </View>
-            {pill.pulsa
-              ? <Pulsar><Pill texto={pill.txt} cor={pill.cor} /></Pulsar>
-              : <Pill texto={pill.txt} cor={pill.cor} />}
-          </View>
-
-          {igSt?.conectado && (
-            <Botao title={t('sync.ig.verify')} cor={colors.card2} txtCor={colors.texto}
-              onPress={verificarAoVivo} loading={verificando} disabled={verificando || raspando} />
-          )}
-          <Botao title={jaTem ? t('sync.ig.reconnect') : t('sync.ig.connect')} cor={colors.marca} txtCor="#FFFFFF"
-            onPress={() => nav.navigate('ContaInstagram')} />
-          <Text style={styles.desc}>{t('sync.ig.desc')}</Text>
-        </Card>
+        <PainelProntidao p={prontidao} colors={colors} styles={styles} t={t} />
       </Aparece>
 
       {ativos.length > 0 && (
@@ -187,17 +134,107 @@ export function SincronizarScreen() {
   );
 }
 
+// Painel "tá pronto pra rodar?": emulador online/offline + status das contas auxiliares (rodízio).
+function PainelProntidao({ p, colors, styles, t }: {
+  p: Prontidao | null; colors: Cores; styles: ReturnType<typeof makeStyles>; t: (k: string, v?: any) => string;
+}) {
+  const online = !!p?.agente_online;
+  const corResumo = !p ? colors.textoFraco : !online ? colors.erro : p.pronto ? colors.ok : colors.alerta;
+  const ping = p && online ? haQuanto(p.ultimo_ping_ha_s) : '';
+
+  return (
+    <Card style={{ gap: 12 }}>
+      <View style={styles.readyTopo}>
+        <View style={styles.readyTituloRow}>
+          <View style={[styles.dot, { backgroundColor: online ? colors.ok : colors.erro }]} />
+          <Text style={styles.titulo}>{t('sync.ready.title')}</Text>
+        </View>
+        <Pill texto={online ? t('sync.ready.online') : t('sync.ready.offline')}
+          cor={online ? colors.ok : colors.erro} />
+      </View>
+
+      {p ? (
+        <Text style={[styles.readyResumo, { color: corResumo }]}>{p.resumo}</Text>
+      ) : (
+        <Text style={styles.desc}>…</Text>
+      )}
+
+      {p?.emulador_ocupado && (
+        <View style={styles.readyOcupado}>
+          <Ionicons name="hourglass-outline" size={15} color={colors.alerta} />
+          <Text style={styles.readyOcupadoTxt}>{t('sync.ready.busy')}</Text>
+        </View>
+      )}
+
+      {ping ? <Text style={styles.readyPing}>{t('sync.ready.pingAgo', { s: ping })}</Text> : null}
+
+      {p && p.contas.length > 0 && (
+        <View style={{ gap: 8 }}>
+          <Text style={styles.secao}>{t('sync.ready.accounts')}</Text>
+          {p.contas.map((c) => (
+            <ContaRow key={c.conta} c={c} proxima={c.conta === p.proxima} colors={colors} styles={styles} t={t} />
+          ))}
+        </View>
+      )}
+      {p && online && p.contas.length === 0 && (
+        <Text style={styles.readyVazio}>{t('sync.ready.noAccounts')}</Text>
+      )}
+
+      <Text style={styles.desc}>{t('sync.ready.desc')}</Text>
+    </Card>
+  );
+}
+
+function ContaRow({ c, proxima, colors, styles, t }: {
+  c: ContaProntidao; proxima: boolean; colors: Cores; styles: ReturnType<typeof makeStyles>;
+  t: (k: string, v?: any) => string;
+}) {
+  const vis = c.estado === 'apta'
+    ? { icon: 'checkmark-circle' as const, cor: colors.ok, badge: t('sync.ready.apta') }
+    : c.estado === 'descansando'
+    ? { icon: 'moon' as const, cor: colors.alerta,
+        badge: horaDe(c.ate) ? t('sync.ready.restingUntil', { h: horaDe(c.ate) }) : t('sync.ready.resting') }
+    : { icon: 'ban' as const, cor: colors.erro, badge: t('sync.ready.blocked') };
+  return (
+    <View style={styles.contaItem}>
+      <Ionicons name={vis.icon} size={16} color={vis.cor} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.contaNome}>@{c.conta}</Text>
+        {c.motivo && c.estado !== 'apta' ? <Text style={styles.contaMotivo}>{c.motivo}</Text> : null}
+      </View>
+      {proxima ? (
+        <View style={styles.proxChip}>
+          <Ionicons name="play" size={10} color={colors.marca} />
+          <Text style={styles.proxChipTxt}>{t('sync.ready.next')}</Text>
+        </View>
+      ) : null}
+      <Pill texto={vis.badge} cor={vis.cor} />
+    </View>
+  );
+}
+
 const makeStyles = (colors: Cores) => StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   titulo: { color: colors.texto, fontSize: 17, fontWeight: '800' },
   desc: { color: colors.textoFraco, fontSize: 13, lineHeight: 19 },
   hint: { color: colors.textoFraco, fontSize: 11, lineHeight: 16, marginTop: 2 },
-  secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase' },
-  igRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  igConta: { color: colors.texto, fontSize: 15, fontWeight: '700' },
-  igSub: { color: colors.textoFraco, fontSize: 11, marginTop: 2 },
+  secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 2, textTransform: 'uppercase' },
   runItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   runTxt: { color: colors.laranja, fontSize: 14, fontWeight: '600' },
   histItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   histTxt: { color: colors.texto, fontSize: 13, flex: 1 },
+  // painel de prontidão
+  readyTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  readyTituloRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  readyResumo: { fontSize: 15, fontWeight: '700', lineHeight: 21 },
+  readyOcupado: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.card2, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.alerta },
+  readyOcupadoTxt: { color: colors.alerta, fontSize: 12, fontWeight: '600', flex: 1, lineHeight: 16 },
+  readyPing: { color: colors.textoFraco, fontSize: 11, marginTop: -4 },
+  readyVazio: { color: colors.textoFraco, fontSize: 13, fontStyle: 'italic' },
+  contaItem: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card2, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  contaNome: { color: colors.texto, fontSize: 14, fontWeight: '700' },
+  contaMotivo: { color: colors.textoFraco, fontSize: 11, marginTop: 2, lineHeight: 15 },
+  proxChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.card, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: colors.marca },
+  proxChipTxt: { color: colors.marca, fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
 });

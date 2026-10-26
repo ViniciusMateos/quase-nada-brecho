@@ -23,7 +23,39 @@ type Parsed =
   | { tipo: 'divisor' }
   | { tipo: 'titulo'; texto: string }
   | { tipo: 'kv'; label: string; valor: string }
+  | { tipo: 'evento'; status: string; resto: string; cor: string; forte: boolean }
   | { tipo: 'texto'; hora: string; texto: string; cor: string; forte: boolean };
+
+// status de cada peça no log (fase A/B + reconciliação) → rótulo MAIÚSCULO + cor, igual ao scraper
+// antigo. Casado pelo COMEÇO da linha (o módulo emite o status primeiro). 'azul'/'branco' = cores
+// fixas boas no fundo escuro do log; o resto vem do tema.
+const EV_DEFS: { re: RegExp; label: string; key: string; forte: boolean }[] = [
+  { re: /^VENDIDA\b/i, label: 'VENDIDA', key: 'ok', forte: true },
+  { re: /^DISPON[IÍ]VEL\b/i, label: 'DISPONÍVEL', key: 'azul', forte: false },
+  { re: /^NOV[AO]\b/i, label: 'NOVO', key: 'laranja', forte: true },
+  { re: /^ATUALIZADA\b/i, label: 'ATUALIZADA', key: 'marca', forte: true },
+  { re: /^RELACIONADA\b/i, label: 'RELACIONADA', key: 'azul', forte: false },
+  { re: /^DIVULGA\S*/i, label: 'DIVULGAÇÃO', key: 'fraco', forte: false },
+  { re: /^N[ÃA]O ABRIU\b/i, label: 'NÃO ABRIU', key: 'alerta', forte: false },
+  { re: /^INDISPON[IÍ]VEL\b/i, label: 'INDISPONÍVEL', key: 'alerta', forte: false },
+  { re: /^SEM LINK\b/i, label: 'SEM LINK', key: 'alerta', forte: false },
+  { re: /^TRAVADA\b/i, label: 'TRAVADA', key: 'fraco', forte: false },
+  { re: /^DESCENDO\b/i, label: 'DESCENDO', key: 'fraco', forte: false },
+  { re: /^CONFERIR\b/i, label: 'CONFERIR', key: 'alerta', forte: true },   // peça travada: post diz vendido
+  { re: /^resumo:/i, label: 'RESUMO', key: 'branco', forte: true },
+];
+function evCor(key: string, colors: Cores): string {
+  switch (key) {
+    case 'ok': return colors.ok;
+    case 'laranja': return colors.laranja;
+    case 'marca': return colors.marca;
+    case 'alerta': return colors.alerta;
+    case 'erro': return colors.erro;
+    case 'azul': return '#5AA9FF';
+    case 'branco': return '#FFFFFF';
+    default: return colors.textoFraco;
+  }
+}
 
 function corEvento(nivel: string, resto: string, colors: Cores): { cor: string; forte: boolean } {
   // eventos por peça do app: colore pelo rótulo do começo da linha
@@ -69,6 +101,15 @@ function parseLinha(raw: string, colors: Cores): Parsed {
   const kv = resto.match(/^(.+?)\s*[.·]{2,}\s*(.+)$/);
   if (kv) return { tipo: 'kv', label: kv[1].trim(), valor: kv[2].trim() };
 
+  // evento por peça: status MAIÚSCULO no começo (VENDIDA/DISPONÍVEL/NOVO/…) + cor; o resto segue
+  for (const d of EV_DEFS) {
+    const mm = resto.match(d.re);
+    if (mm) {
+      const r = resto.slice(mm[0].length).replace(/^\s*[|:·—–-]+\s*/, '').replace(/\s+/g, ' ').trim();
+      return { tipo: 'evento', status: d.label, resto: r, cor: evCor(d.key, colors), forte: d.forte };
+    }
+  }
+
   const { cor, forte } = corEvento(nivel, resto, colors);
   return { tipo: 'texto', hora, texto: resto, cor, forte };
 }
@@ -96,6 +137,15 @@ function LogLinha({ raw, onCopiar }: { raw: string; onCopiar: (t: string) => voi
       <Animated.View style={[wrapStyle, styles.kvRow]}>
         <Text style={styles.kvLabel}>{p.label}</Text>
         <Text style={styles.kvValor}>{p.valor}</Text>
+      </Animated.View>
+    );
+  } else if (p.tipo === 'evento') {
+    el = (
+      <Animated.View style={wrapStyle}>
+        <Text style={styles.linha}>
+          <Text style={{ color: p.cor, fontWeight: '800' }}>{p.status}</Text>
+          {p.resto ? <Text style={{ color: p.forte ? p.cor : '#CFCFCF' }}>{'  ' + p.resto}</Text> : null}
+        </Text>
       </Animated.View>
     );
   } else {
@@ -318,10 +368,11 @@ const makeStyles = (colors: Cores) => StyleSheet.create({
   forte: { fontWeight: '700' },
   divisorWrap: { paddingVertical: 7 },
   divisor: { height: 1, backgroundColor: colors.border },
-  titulo: { color: colors.laranja, fontSize: 13, fontWeight: '700', marginTop: 8, marginBottom: 2, letterSpacing: 0.3 },
+  titulo: { color: colors.laranja, fontSize: 13, fontWeight: '700', marginTop: 14, marginBottom: 4, letterSpacing: 0.3 },
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, paddingVertical: 2 },
-  kvLabel: { color: colors.textoFraco, fontSize: 13, flexShrink: 1 },
-  kvValor: { color: colors.texto, fontSize: 13, fontWeight: '600' },
+  // cores FIXAS claras: a caixa de log é sempre escura (#0A0A0A), no tema claro o texto do tema sumia
+  kvLabel: { color: '#9A9A9A', fontSize: 13, flexShrink: 1 },
+  kvValor: { color: '#EDEDED', fontSize: 13, fontWeight: '600' },
   voltarWrap: { position: 'absolute', right: 22 },
   voltarBtn: {
     backgroundColor: colors.laranja, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999,
