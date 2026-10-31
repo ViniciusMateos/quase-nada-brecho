@@ -89,7 +89,8 @@ quase-nada-brecho/
   **peças novas** (lê o feed do topo até o 1º post que o app já conhece) e **conferência das
   peças à venda** (abre cada uma direto pelo link do post e vê se virou "vendido" ou mudou o
   preço — o Insta ganha nas disponíveis). Peça postada que ficou **sem link** é caçada no feed
-  até o drop dela. A reconciliação casa por `#p` → `code` → nome e chega **em lotes de 10** (o
+  até o drop dela — inclusive as **vendidas de drops dos últimos 30 dias** (o Like + Repost dos
+  Bots precisa do link de todas as peças do drop). A reconciliação casa por `#p` → `code` → nome e chega **em lotes de 10** (o
   app vai se atualizando durante a run). O **print da foto sai limpo** (sem a bolha de repost e
   o contador "1/3" do Insta) e fica salvo no servidor — não depende do link de imagem do IG,
   que expira. **Logs ao vivo** em seções, com o **status colorido** no começo de cada peça
