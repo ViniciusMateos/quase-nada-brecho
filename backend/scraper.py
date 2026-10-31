@@ -283,10 +283,13 @@ def alvos_emulador(n_recentes=40):
         (/p/<code>/), lê a legenda e vê se virou "vendido". [{code, num}]
       - recentes: codes dos posts mais novos que o app já conhece. O device lê o feed do TOPO
         e PARA no 1º code conhecido (dali pra trás é tudo conhecido) → só raspa o que é NOVO.
-      - sem_link: #p das peças NÃO vendidas SEM code mas dentro de drop PUBLICADO = postadas, só
-        que o device nunca pegou o link (fase B não abre). A fase A NÃO para no 1º conhecido
-        enquanto faltar alguma: desce até achar a última (casa por #p) e aí para — drop 100% vendido
-        abaixo dela nunca é relido. Peça sem drop = rascunho (não postada) → fica de fora.
+      - sem_link: #p das peças SEM code mas dentro de drop PUBLICADO = postadas, só que o device
+        nunca pegou o link (fase B não abre). A fase A NÃO para no 1º conhecido enquanto faltar
+        alguma: desce até achar a última (casa por #p) e aí para — drop 100% vendido abaixo dela
+        nunca é relido. Peça sem drop = rascunho (não postada) → fica de fora. Entram as NÃO
+        vendidas e, desde 29/10, as VENDIDAS de drop dos últimos 30 dias: peça manual que vendeu
+        antes da raspagem pegar o link ficava sem post pra sempre (4 do drop 13) e o Like + Repost
+        dos Bots precisa do link. Vendida mais velha fica de fora (faria descer o feed inteiro).
       - conhecidos: #p de toda peça já raspada (tem code). A fase A reconhece post conhecido só
         pela legenda (leitura leve, sem print nem copiar-link) enquanto desce."""
     import pecas
@@ -301,9 +304,12 @@ def alvos_emulador(n_recentes=40):
     recentes = [p["code"] for p in com_code[:n_recentes]]
     with conn() as c:
         publicados = {r["id"] for r in c.execute("SELECT id FROM drops WHERE status = 'publicado'")}
+    from datetime import timedelta
+    lim_vendida = (date.today() - timedelta(days=30)).isoformat()
     sem_link_ps = [p for p in ps
-                   if not p.get("code") and not p.get("vendida") and p.get("num")
-                   and p.get("drop_id") in publicados]
+                   if not p.get("code") and p.get("num") and p.get("drop_id") in publicados
+                   and (not p.get("vendida")
+                        or (p.get("drop_data") or p.get("postado_em") or "") >= lim_vendida)]
     sem_link = [p["num"] for p in sem_link_ps]
     conhecidos = [p["num"] for p in com_code if p.get("num")]
     # profundidade = até onde a fase A desce atrás delas: nº de posts do topo até o drop MAIS ANTIGO
