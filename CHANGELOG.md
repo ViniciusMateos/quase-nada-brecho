@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.1] — 2026-10-31
+
+### Corrigido
+- fix: a raspagem procura o link do post também das peças **vendidas** dos drops dos últimos 30 dias — peça cadastrada na mão que vendia antes da raspagem pegar o link ficava sem post pra sempre (4 do drop 13), e o Like + Repost dos Bots precisa do link; as mais velhas ficam de fora pra não descer o feed inteiro
+
+### Documentação
+- docs: README com a busca do link das vendidas recentes
+
 ## [1.10.0] — 2026-10-26
 
 ### Adicionado
