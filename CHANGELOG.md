@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.0] — 2026-11-26
+
+### Adicionado
+- feat: **busca pelo código da peça** — `p438`, `#p438` ou `#p 438` trazem só a #p438 (exato: `p43` não traz mais a p430–p439); `438` sozinho traz a #p438 e o que tiver 438 no nome. Placeholder da busca vira "Buscar peça ou #p…" (OTA 66).
+
+### Documentação
+- docs: README com a busca pelo código #p
+
 ## [1.10.1] — 2026-10-31
 
 ### Corrigido
