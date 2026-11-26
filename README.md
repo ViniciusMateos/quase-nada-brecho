@@ -42,7 +42,9 @@ quase-nada-brecho/
   estado do drop (sem drop / em algum drop / publicado / agendado / rascunho), consignado e
   origem (criada no app / raspada do Insta) — com badge de filtros ativos e "limpar filtros".
   A **busca é tolerante**: ignora acento, aceita as palavras em qualquer
-  ordem e aguenta typo leve (casa por nome e categoria, em PT e traduzida). Mostra o **drop**
+  ordem e aguenta typo leve (casa por nome e categoria, em PT e traduzida) e acha pelo **código
+  da peça** — `p438`, `#p438` ou `#p 438` trazem só a #p438; `438` sozinho traz a #p438 e o que
+  tiver 438 no nome. Mostra o **drop**
   da peça e permite **entrar nele** (pelo editor ou segurando a peça). Dá pra **selecionar
   várias** (segurar → "Selecionar", ou o botão no topo) e **apagar em lote**. O editor é um
   componente único, compartilhado com a tela de Drops, organizado em seções.
