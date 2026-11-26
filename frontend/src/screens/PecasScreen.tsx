@@ -65,13 +65,22 @@ function subsequencia(alvo: string, texto: string): boolean {
   return i === alvo.length;
 }
 // casa se CADA palavra da busca aparece no texto (ordem livre — "nike camisa" acha "camisa nike");
-// palavra com 4+ letras ainda casa por subsequência (typo/letra a menos: "camsa" acha "camisa")
-function casaBusca(texto: string, busca: string): boolean {
+// palavra com 4+ letras ainda casa por subsequência (typo/letra a menos: "camsa" acha "camisa").
+// Código da peça (#p438): "p438" / "#p438" / "P438" casa SÓ a peça 438 (exato — senão p43 trazia
+// p430…p439 e a subsequência trazia p483); número puro ("438") casa a peça 438 OU o número no texto
+// (ex.: "air max 90"), sem subsequência.
+function casaBusca(texto: string, busca: string, num: number | null): boolean {
   const alvo = normBusca(texto);
   const semEspaco = alvo.replace(/ /g, '');
-  const termos = normBusca(busca).split(' ').filter(Boolean);
+  // "#p 438" / "p 438" (com espaço) vira um termo só: "p438"
+  const termos = normBusca(busca).replace(/\bp (\d+)\b/g, 'p$1').split(' ').filter(Boolean);
   if (!termos.length) return true;
-  return termos.every((termo) => alvo.includes(termo) || (termo.length >= 4 && subsequencia(termo, semEspaco)));
+  return termos.every((termo) => {
+    const cod = /^p(\d+)$/.exec(termo);
+    if (cod) return num != null && num === Number(cod[1]);
+    if (/^\d+$/.test(termo)) return (num != null && num === Number(termo)) || alvo.includes(termo);
+    return alvo.includes(termo) || (termo.length >= 4 && subsequencia(termo, semEspaco));
+  });
 }
 
 export function PecasScreen() {
@@ -223,8 +232,8 @@ export function PecasScreen() {
       if (filtros.origem === 'manual' && p.origem !== 'manual') return false;
       if (filtros.origem === 'scraper' && p.origem === 'manual') return false;
       if (categoria && (p.item ?? '').trim() !== categoria) return false;
-      // busca tolerante (sem acento, ordem livre, typo): nome + categoria (PT e traduzida)
-      if (b && !casaBusca(`${p.nome ?? ''} ${p.item ?? ''} ${traduzCategoria(p.item ?? '', lang)}`, b)) return false;
+      // busca tolerante (sem acento, ordem livre, typo): nome + categoria (PT e traduzida) + código #p
+      if (b && !casaBusca(`${p.nome ?? ''} ${p.item ?? ''} ${traduzCategoria(p.item ?? '', lang)}`, b, p.num)) return false;
       return true;
     });
     // ordena por recência (data do post; peça manual sem data = mais recente), desempata por id.

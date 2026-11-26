@@ -1,6 +1,6 @@
 // Pack de traduções: tela de Peças (busca, filtros, categoria, cards, alertas).
 export const pt: Record<string, string> = {
-  'pecas.search': 'Buscar peça…',
+  'pecas.search': 'Buscar peça ou #p…',
   'pecas.select': 'Selecionar',
   'pecas.selectedCount': '{n} selecionadas',
   'pecas.deleteSelected': 'Excluir',
@@ -67,7 +67,7 @@ export const pt: Record<string, string> = {
   'carrossel.discard': 'Descartar',
 };
 export const en: Record<string, string> = {
-  'pecas.search': 'Search item…',
+  'pecas.search': 'Search item or #p…',
   'pecas.select': 'Select',
   'pecas.selectedCount': '{n} selected',
   'pecas.deleteSelected': 'Delete',
